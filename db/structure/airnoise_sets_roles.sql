@@ -16,17 +16,17 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
--- Table structure for table `trainings`
+-- Table structure for table `sets_roles`
 --
 
-DROP TABLE IF EXISTS `trainings`;
+DROP TABLE IF EXISTS `sets_roles`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
  SET character_set_client = utf8mb4 ;
-CREATE TABLE `trainings` (
-  `id_training` int(11) NOT NULL AUTO_INCREMENT,
-  `description` varchar(200) DEFAULT NULL,
-  PRIMARY KEY (`id_training`)
-) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=latin1;
+CREATE TABLE `sets_roles` (
+  `id_role` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(45) NOT NULL,
+  PRIMARY KEY (`id_role`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -38,4 +38,4 @@ CREATE TABLE `trainings` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2019-05-14  9:40:21
+-- Dump completed on 2019-05-14 11:37:27
