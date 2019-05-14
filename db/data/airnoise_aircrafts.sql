@@ -1,0 +1,37 @@
+-- MySQL dump 10.13  Distrib 8.0.16, for Win64 (x86_64)
+--
+-- Host: localhost    Database: airnoise
+-- ------------------------------------------------------
+-- Server version	5.7.25-log
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+ SET NAMES utf8 ;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+--
+-- Dumping data for table `aircrafts`
+--
+
+LOCK TABLES `aircrafts` WRITE;
+/*!40000 ALTER TABLE `aircrafts` DISABLE KEYS */;
+INSERT INTO `aircrafts` (`id_aircraft`, `identifier`, `description`) VALUES (1,'A320-2xx (CFM56-5)','In the ANP the A320-211 is in the acoustic class CFM565. Airbus builds the A320-2 * with 2 types of engines.'),(2,'A320-2xx (V25xx)','In the ANP the A320-232 is in the acoustic class V2527A. Airbus builds the A320-2 * with 2 types of engines.'),(3,'A319-1xx (CFM56-5)','In the ANP only the A319-131 with V2522-A5 engines appears but there are 2 variants.'),(4,'A319-1xx (V25xx)','In the ANP appears the A319-131 with V2522-A5 engines. Airbus builds the A319 with CFM56-5B and V2500-A5 engines.'),(5,'ATR42-300 (PW120)','In the ANP it does not appear but there is a class PW120 to which the DASH 8-100 and DASH 8-300 belong.'),(6,'ATR42-500 (PW127E)','It does not appear in the ANP.'),(7,'ATR72-600 (PW127M)','It does not appear in the ANP.'),(8,'B737-3xx (CFM56-3)','En la ANP aparecen el 737300 y 7373B2 en la clase CFM563.'),(9,'B737-8xx (CF56-7B22+)','En la ANP el 737-7 y 737-8 tienen la misma clase CF567B.'),(10,'B737-7xx (CF56-7B22-)','En la ANP el 737-7 y 737-8 tienen la misma clase CF567B.'),(11,'ERJ145 (AE3007)','En la ANP el EMB145 y EMB14L tienen la clase AE3007.'),(12,'ERJ170/175 (CF34-8E)','It does not appear in the ANP.'),(13,'ERJ190 (CF34-10E)','It does not appear in the ANP.'),(14,'MD-8x (2JT8D2)','En la ANP el MD81, MD82 y MD83 están agrupados en la misma clase acústica 2JT8D2.'),(15,'TU204 (PS-90A)','It does not appear in the ANP.'),(16,'SU95 (SaM 146)','It does not appear in the ANP. Sukoi.'),(17,'787-8 Dreamliner (GEnx-1B)','It does not appear in the ANP.'),(18,'B767-3* (PW4060)','En la ANP aparece en la clase 2CF680.'),(19,'B747-8* (GEnx-2B67)','It does not appear in the ANP.'),(20,'B747-4*(CF6-80C2B5F)','It does not appear in the ANP.'),(21,'CRJ200 (CF34-3B1)','It does not appear in the ANP.'),(22,'A340-6* (Trent 556A2-61)','En la ANP aparece en la clase TRENT5.');
+/*!40000 ALTER TABLE `aircrafts` ENABLE KEYS */;
+UNLOCK TABLES;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+
+-- Dump completed on 2019-05-14  9:44:15
