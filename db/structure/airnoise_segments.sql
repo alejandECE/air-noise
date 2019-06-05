@@ -27,15 +27,13 @@ CREATE TABLE `segments` (
   `number` int(11) NOT NULL,
   `start` float NOT NULL,
   `end` float NOT NULL,
-  `id_type` int(11) NOT NULL,
+  `type` int(11) NOT NULL,
   `microphone` int(11) NOT NULL,
   `array` int(11) NOT NULL,
-  `id_measurement` int(11) NOT NULL,
+  `measurement` int(11) NOT NULL,
   PRIMARY KEY (`id_segment`),
-  KEY `fk_segments_segment_types_idx` (`id_type`),
-  KEY `fk_segments_signals_idx` (`microphone`,`array`,`id_measurement`),
-  CONSTRAINT `fk_segment_types_s` FOREIGN KEY (`id_type`) REFERENCES `segment_types` (`id_type`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_segments_s` FOREIGN KEY (`microphone`, `array`, `id_measurement`) REFERENCES `signals` (`microphone`, `array`, `id_measurement`) ON DELETE CASCADE ON UPDATE CASCADE
+  KEY `fk_segments_segment_types_idx` (`type`),
+  CONSTRAINT `fk_segment_types_s` FOREIGN KEY (`type`) REFERENCES `segment_types` (`id_type`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=18145 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -48,4 +46,4 @@ CREATE TABLE `segments` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2019-05-14 11:37:27
+-- Dump completed on 2019-06-05  7:45:02

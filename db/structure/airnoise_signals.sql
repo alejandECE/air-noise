@@ -23,15 +23,12 @@ DROP TABLE IF EXISTS `signals`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
  SET character_set_client = utf8mb4 ;
 CREATE TABLE `signals` (
-  `id_measurement` int(11) NOT NULL,
+  `measurement` int(11) NOT NULL,
   `array` int(11) NOT NULL,
   `microphone` int(11) NOT NULL,
-  `id_calibration` int(11) NOT NULL,
-  PRIMARY KEY (`microphone`,`array`,`id_measurement`),
-  KEY `fk_signals_measurements_idx` (`id_measurement`),
-  KEY `fk_signals_cal_idx` (`id_calibration`),
-  CONSTRAINT `fk_signals_cal` FOREIGN KEY (`id_calibration`) REFERENCES `calibrations` (`id_calibration`) ON DELETE NO ACTION ON UPDATE NO ACTION,
-  CONSTRAINT `fk_signals_m` FOREIGN KEY (`id_measurement`) REFERENCES `measurements` (`id_measurement`) ON DELETE CASCADE ON UPDATE CASCADE
+  PRIMARY KEY (`measurement`,`array`,`microphone`),
+  KEY `fk_signals_measurements_idx` (`measurement`),
+  CONSTRAINT `fk_signals_m` FOREIGN KEY (`measurement`) REFERENCES `measurements` (`id_measurement`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -44,4 +41,4 @@ CREATE TABLE `signals` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2019-05-14 11:37:27
+-- Dump completed on 2019-06-05  7:45:01

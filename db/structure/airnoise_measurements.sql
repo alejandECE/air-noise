@@ -25,19 +25,17 @@ DROP TABLE IF EXISTS `measurements`;
 CREATE TABLE `measurements` (
   `id_measurement` int(11) NOT NULL AUTO_INCREMENT,
   `url` varchar(200) NOT NULL,
-  `id_aircraft` int(11) NOT NULL,
-  `id_quality` int(11) NOT NULL,
-  `id_runway` int(11) NOT NULL,
+  `aircraft` int(11) NOT NULL,
+  `quality` int(11) NOT NULL,
+  `runway` int(11) NOT NULL,
   `metar` varchar(200) NOT NULL,
   `description` varchar(200) DEFAULT NULL,
   PRIMARY KEY (`id_measurement`),
   UNIQUE KEY `url_UNIQUE` (`url`),
-  KEY `id_aircrafts` (`id_aircraft`),
-  KEY `fk_measurements_quality_idx` (`id_quality`),
-  KEY `fk_measurements_runways_idx` (`id_runway`),
-  CONSTRAINT `fk_aircrafts_m` FOREIGN KEY (`id_aircraft`) REFERENCES `aircrafts` (`id_aircraft`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_quality_m` FOREIGN KEY (`id_quality`) REFERENCES `quality` (`id_quality`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_runways_m` FOREIGN KEY (`id_runway`) REFERENCES `runways` (`id_runway`) ON DELETE CASCADE ON UPDATE CASCADE
+  KEY `fk_measurements_quality_idx` (`quality`),
+  KEY `fk_measurements_runways_idx` (`runway`),
+  CONSTRAINT `fk_quality_m` FOREIGN KEY (`quality`) REFERENCES `quality` (`id_quality`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_runways_m` FOREIGN KEY (`runway`) REFERENCES `runways` (`id_runway`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=190 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -50,4 +48,4 @@ CREATE TABLE `measurements` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2019-05-14 11:37:26
+-- Dump completed on 2019-06-05  7:45:02
