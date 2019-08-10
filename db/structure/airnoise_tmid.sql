@@ -1,13 +1,13 @@
--- MySQL dump 10.13  Distrib 8.0.16, for Win64 (x86_64)
+-- MySQL dump 10.13  Distrib 8.0.17, for Win64 (x86_64)
 --
 -- Host: localhost    Database: airnoise
 -- ------------------------------------------------------
--- Server version	5.7.25-log
+-- Server version	8.0.17
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
- SET NAMES utf8 ;
+/*!50503 SET NAMES utf8 */;
 /*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
 /*!40103 SET TIME_ZONE='+00:00' */;
 /*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
@@ -16,14 +16,21 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
--- Dumping data for table `segment_types`
+-- Table structure for table `tmid`
 --
 
-LOCK TABLES `segment_types` WRITE;
-/*!40000 ALTER TABLE `segment_types` DISABLE KEYS */;
-INSERT INTO `segment_types` (`id_type`, `name`, `description`) VALUES (1,'Spatial','Extracted based on spatial information'),(2,'Nonspatial','Extracted as in the ESWA paper');
-/*!40000 ALTER TABLE `segment_types` ENABLE KEYS */;
-UNLOCK TABLES;
+DROP TABLE IF EXISTS `tmid`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tmid` (
+  `measurement` int(11) NOT NULL,
+  `microphone` int(11) NOT NULL,
+  `array` int(11) NOT NULL,
+  `location` float NOT NULL DEFAULT '0',
+  PRIMARY KEY (`measurement`,`microphone`,`array`),
+  CONSTRAINT `fk_signals` FOREIGN KEY (`measurement`, `microphone`, `array`) REFERENCES `signals` (`measurement`, `microphone`, `array`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -34,4 +41,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2019-06-05  7:45:31
+-- Dump completed on 2019-08-10 14:28:38

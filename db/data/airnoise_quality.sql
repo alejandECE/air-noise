@@ -1,13 +1,13 @@
--- MySQL dump 10.13  Distrib 8.0.16, for Win64 (x86_64)
+-- MySQL dump 10.13  Distrib 8.0.17, for Win64 (x86_64)
 --
 -- Host: localhost    Database: airnoise
 -- ------------------------------------------------------
--- Server version	5.7.25-log
+-- Server version	8.0.17
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
- SET NAMES utf8 ;
+/*!50503 SET NAMES utf8 */;
 /*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
 /*!40103 SET TIME_ZONE='+00:00' */;
 /*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
@@ -21,7 +21,7 @@
 
 LOCK TABLES `quality` WRITE;
 /*!40000 ALTER TABLE `quality` DISABLE KEYS */;
-INSERT INTO `quality` (`id_quality`, `name`, `description`) VALUES (1,'GOOD','No relevant disturbances'),(2,'REGULAR','Some relevant disturbances'),(3,'BAD','Many relevant disturbances');
+INSERT INTO `quality` VALUES (1,'GOOD','No relevant disturbances'),(2,'REGULAR','Some relevant disturbances'),(3,'BAD','Many relevant disturbances');
 /*!40000 ALTER TABLE `quality` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -34,4 +34,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2019-06-05  7:45:32
+-- Dump completed on 2019-08-10 14:29:17
