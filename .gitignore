@@ -1,0 +1,5 @@
+.ipynb_checkpoints
+*.wav
+*.txt
+*.zip
+__pycache__
