@@ -2,4 +2,5 @@
 *.wav
 *.txt
 *.zip
+*.csv
 __pycache__
