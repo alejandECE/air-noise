@@ -11,7 +11,7 @@ from multiprocessing import Pipe
     
 class AircraftTmidTagger(object):
     
-    ALPHA = 0.8
+    ALPHA = 1.
     
     def __init__(self):
         self.fs = 51200
@@ -62,18 +62,19 @@ class AircraftTmidTagger(object):
     
     def _on_key_release(self, event):
         if event.key == 'shift':
+            print('Release')
             self._is_shift_pressed = False
             
     def _on_key_press(self, event):
         print(event.key)
         if event.key == ' ':
             self._play_curr_signal()
-        elif event.key == 'right':
+        elif event.key == 'right' or event.key == 'shift+right':
             if self._is_shift_pressed:
                 self._change_signal(step=12)
             else:
                 self._change_signal(step=1)
-        elif event.key == 'left':
+        elif event.key == 'left' or event.key == 'shift+left':
             if self._is_shift_pressed:
                 self._change_signal(step=-12)
             else:
@@ -100,7 +101,7 @@ class AircraftTmidTagger(object):
         if self._current >= len(self._signals):
             self._current = self._current - len(self._signals)
         if self._current < 0:
-            self._current = len(self._signals) - self._current
+            self._current = len(self._signals) + self._current
         # plot current signal
         self._plot_curr_signal()
         # resets history of tmids
@@ -187,17 +188,17 @@ class AircraftTmidTagger(object):
             i = len(indexes) - 2
         location = int((indexes[i+1] + indexes[i])/2)/fs
         print(location)
-        ax.plot([location,location],[-1,1],'m-',alpha=self.ALPHA)
+        ax.plot([location,location],[-1,1],'m-',alpha=self.ALPHA,lw=2)
         
     def _plot_freq_tmid(self,ax,data,fs):
         f, t, Sxx = spectrogram(data,fs,mode='magnitude',
                                 window='hamming',nperseg=512,noverlap=256)
         power = Sxx.mean(axis=0)
         location = t[power.argmax()]
-        ax.plot([location,location],[-1,1],'g-',alpha=self.ALPHA)
+        ax.plot([location,location],[-1,1],'c-',alpha=self.ALPHA,lw=2)
 
     def _plot_user_tmid(self,ax,location):
-        self._tmid, = ax.plot([location,location],[-1,1],'k-',alpha=self.ALPHA)
+        self._tmid, = ax.plot([location,location],[-1,1],'k-',alpha=self.ALPHA,lw=2)
 
     def _update_user_tmid(self,ax,location):
         print(location)
