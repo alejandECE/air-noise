@@ -31,21 +31,13 @@ class AircraftDatasetBuilder(object):
         self.arrays = arrays
         self.microphones = microphones
         self.verbose = verbose
-        self._init_sets()
-        
-    def _init_sets(self):
         self.sets = dict()
-        if self.segmentation == 'db_original':
-            for i in range(4):
-                self.sets[i] = dict()
-                self.sets[i]['X'] = list()
-                self.sets[i]['y'] = list()
-                self.sets[i]['extra'] = list()
-        elif self.segmentation == 'db_largest_merge':
-            self.sets[0] = dict()
-            self.sets[0]['X'] = list()
-            self.sets[0]['y'] = list()
-            self.sets[0]['extra'] = list()
+        
+    def _init_set(self, segment):
+        self.sets[segment] = dict()
+        self.sets[segment]['X'] = list()
+        self.sets[segment]['y'] = list()
+        self.sets[segment]['extra'] = list()
                 
     def build(self):
         for category in self.classes:
@@ -77,6 +69,8 @@ class AircraftDatasetBuilder(object):
                     for i, (start, end) in enumerate(segments):
                         features = self._extract_features(signal[start:end+1])
                         features = features.flatten()
+                        if i not in self.sets:
+                            self._init_set(i)
                         self.sets[i]['X'].append(features)
                         self.sets[i]['y'].append(category)
                         self.sets[i]['extra'].append(measurement)
@@ -93,18 +87,20 @@ class AircraftDatasetBuilder(object):
         
     def _load_db_original_segments(self,measurement,microphone,array):
         segments = list()
-        sql = ('''SELECT s.start, s.end FROM segments s WHERE
-               s.measurement6 = {:} AND
-               s.array = {:} AND
-               s.microphone = {:} AND
-               type = 2''').format(measurement, array, microphone)
+        sql = ('''SELECT t.location FROM tmid t WHERE
+               t.measurement = {:} AND
+               t.array = {:} AND
+               t.microphone = {:}''').format(measurement, array, microphone)
         self.dbcursor.execute(sql)
         result = self.dbcursor.fetchall()
                         
-        for (start,_) in result:
-            start = int(start * self.fs)
-            end = int(start + 2*self.fs) # 2 secs exactly
-            segments.append((start,end))
+        if len(result) > 0:
+            tmid = result[0][0]
+            for i in range(4):
+                start = int((tmid - 4 + i*2)*self.fs) 
+                end = start + int(2*self.fs) # exactly 2 secs
+                segments.append((start,end))
+            
         return segments
               
     def _load_db_largest_merge_segments(self,measurement,microphone,array):
