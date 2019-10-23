@@ -192,7 +192,7 @@ class AircraftDatasetFoldIterator():
     '''
         Generates k-fold stratified folds for the aircraft dataset.
         
-        It ensures the number samples per class on each fold is as even as
+        It ensures the number of samples per class on each fold is as even as
         possible. During validation for traning it includes all signals from a
         measurement but for test only one random signal from each measurement
         is included.
