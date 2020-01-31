@@ -123,7 +123,7 @@ class AircraftDatasetBuilder(object):
     def _extract_ngram_mfcc(self, data, size=(20,), d_factor=6):
         mfcc_size = size[0]
         data = decimate(data,d_factor)
-        spectrogram = librosa.feature.mfcc(data,int(self.fs / d_factor),n_mfcc=mfcc_size,hop_length=512)
+        spectrogram = librosa.feature.mfcc(np.asfortranarray(data),int(self.fs / d_factor),n_mfcc=mfcc_size,hop_length=512)
         if len(size) > 1:
             t_size = size[1]
             if t_size > spectrogram.shape[1]:
@@ -236,6 +236,7 @@ class AircraftDatasetFoldIterator():
         # Builds test observations
         test_obs = []
         if (self.current >= len(self._splits)):
+            self.current = 0
             raise StopIteration
         indexes = self._splits[self.current]
         for index in indexes:
