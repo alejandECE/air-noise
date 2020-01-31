@@ -26,7 +26,7 @@ class AircraftTmidTagger(object):
         # Gets signals
         dbcursor = self._mydb.cursor()
         sql = '''SELECT t.measurement, t.array, t.microphone, t.location FROM
-                tmid t'''
+                tmid t ORDER BY t.measurement, t.array, t.microphone;'''
         dbcursor.execute(sql)
         self._signals = dbcursor.fetchall()
         # Auxiliary pointers to iterate through signals
@@ -234,7 +234,7 @@ class AircraftTmidTagger(object):
      
     # Plots MFCC in the given axes
     def _plot_mfcc(self,ax,data,fs):
-        mat = librosa.feature.mfcc(data,fs,n_mfcc=100,hop_length=512,fmax=1000)
+        mat = librosa.feature.mfcc(np.asfortranarray(data),fs,n_mfcc=100,hop_length=512,fmax=1000)
         ax.clear()
         ax.pcolormesh(mat, cmap='magma')
         self._set_axis_font(ax)
