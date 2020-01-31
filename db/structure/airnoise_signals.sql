@@ -1,8 +1,8 @@
--- MySQL dump 10.13  Distrib 8.0.17, for Win64 (x86_64)
+-- MySQL dump 10.13  Distrib 8.0.19, for Win64 (x86_64)
 --
 -- Host: localhost    Database: airnoise
 -- ------------------------------------------------------
--- Server version	8.0.17
+-- Server version	8.0.19
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -23,10 +23,10 @@ DROP TABLE IF EXISTS `signals`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `signals` (
-  `measurement` int(11) NOT NULL,
-  `microphone` int(11) NOT NULL,
-  `array` int(11) NOT NULL,
-  PRIMARY KEY (`measurement`,`microphone`,`array`),
+  `measurement` int NOT NULL,
+  `array` int NOT NULL,
+  `microphone` int NOT NULL,
+  PRIMARY KEY (`measurement`,`array`,`microphone`),
   KEY `fk_signals` (`measurement`,`microphone`,`array`),
   CONSTRAINT `fk_signals_m` FOREIGN KEY (`measurement`) REFERENCES `measurements` (`id_measurement`) ON DELETE RESTRICT ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
@@ -41,4 +41,4 @@ CREATE TABLE `signals` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2019-08-10 14:28:36
+-- Dump completed on 2020-01-31 14:22:35
