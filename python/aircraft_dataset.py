@@ -1,92 +1,95 @@
 #  Created by Luis Alejandro (alejand@umich.edu)
-from nptdms import TdmsFile
+import nptdms
 import numpy as np
-import pandas as pd
 import os
 import librosa
 import datetime
 from scipy.signal import decimate
 
-class AircraftDatasetBuilder(object):
+class AircraftFeaturesExtractor(object):
     '''
-        Builds a aircraft dataset using the specified feature extraction method
+        Extracts specified features from TDMS files (grouped by some class)
+        and exports features to a single file per signal per measurement 
     '''
     def __init__(self,
                  dbcursor,
                  classes,
                  fs,
-                 feature_type = 'ngram_mfcc',
-                 train_pct = 0.7,
-                 segmentation = 'db_original',
+                 feature_type = 'melspectrogram',
+                 segmentation = None,
+                 export = 'npy',
                  arrays = [1,2,3],
                  microphones = [1,2,3,4],
-                 verbose = True):
-        
+                 logged = True):
+
         self.fs = fs
         self.dbcursor = dbcursor
         self.classes = classes
         self.feature_type = feature_type
-        self.train_pct = train_pct
         self.segmentation = segmentation
         self.arrays = arrays
         self.microphones = microphones
-        self.verbose = verbose
-        self.sets = dict()
-        
-    def _init_set(self, segment):
-        self.sets[segment] = dict()
-        self.sets[segment]['X'] = list()
-        self.sets[segment]['y'] = list()
-        self.sets[segment]['extra'] = list()
+        self.logged = logged
                 
     def build(self):
-        for category in self.classes:
-            if self.verbose == True:
-                print('Working on class: %s' % category)
-            # Receives measurements for every aircraft in the class
-            sql = '''SELECT m.id_measurement, m.url FROM 
-                        measurements m WHERE m.aircraft IN ({:});'''.format(
-                        str(self.classes[category])[1:-1])
-            self.dbcursor.execute(sql)
-            results = self.dbcursor.fetchall()
-            self._update_sets(results, category)
-        return self.sets
+        # Creates a folder to store dataset
+        self._create_root_folder()
+        # Creates log file if chosen
+        self._create_log()
+        try:
+            # Goes through every class finding measurements in DB
+            for category in self.classes:
+                # Logging
+                self._log_message('Working on class: %s' % category)
+                # Receives measurements for every aircraft in the class
+                sql = '''SELECT m.id_measurement, m.url FROM 
+                            measurements m WHERE m.aircraft IN ({:});'''.format(
+                            str(self.classes[category])[1:-1])
+                self.dbcursor.execute(sql)
+                results = self.dbcursor.fetchall()
+                # Process all measurements from category
+                self._process_measurements(results, category)
+        except:
+            # Logging
+            self._close_log('An exception occurred...')
+        # Logging
+        self._close_log('Done processing measurements!')
 
-    def _update_sets(self, measurements, category):
-        if self.verbose == True:
-            print('\tMeasurements included:')
+    def _process_measurements(self, measurements, category):
+        # Logging
+        self._log_message('\tMeasurements included:')
+        # Goes through every signal in the measurement
+        path = self._create_category_folder(category)
         for measurement, url in measurements:
-            if self.verbose == True:
-                print('\t\tId: %d, URL: %s' % (measurement,url))
-            tdms = TdmsFile("../../datasets/classification/noise/" + url)
+            # Logging
+            self._log_message('\t\tId: %d, URL: %s' % (measurement,url))
+            # Opens TDMS file
+            tdms = nptdms.TdmsFile("../../datasets/classification/noise/" + url)
             for array in self.arrays:
                 for microphone in self.microphones:
+                    # Reads data (actual time series)
                     signal = tdms.channel_data(
                             group = 'Untitled',
                             channel = 'cDAQ1Mod' + str(array) +
                             '/ai' + str(microphone - 1))
-                    segments = self._extract_segments(measurement,microphone,array)
-                    for i, (start, end) in enumerate(segments):
+                    # Extracts features
+                    if self.segmentation is None:
+                        features = self._extract_features(signal)             
+                    elif self.segmentation == 'tmid':
+                        window = 5
+                        tmid = self._get_tmid(measurement,microphone,array)
+                        start = int((tmid - window)*self.fs) 
+                        end = int((tmid + window)*self.fs) 
                         features = self._extract_features(signal[start:end+1])
-                        features = features.flatten()
-                        if i not in self.sets:
-                            self._init_set(i)
-                        self.sets[i]['X'].append(features)
-                        self.sets[i]['y'].append(category)
-                        self.sets[i]['extra'].append(measurement)
-       
-    def _extract_segments(self, measurement,microphone,array):
-        if self.segmentation == 'db_original':
-            return self._load_db_original_segments(measurement,microphone,array)
-        elif self.segmentation == 'db_largest_merge':
-            return self._load_db_largest_merge_segments(measurement,microphone,array)
-    
+                    # Stores features
+                    name = 'm{}a{}s{}.npy'.format(measurement,array,microphone)
+                    np.save(os.path.join(path,name),features)
+
     def _extract_features(self, data):
-        if (self.feature_type == 'ngram_mfcc'):
-            return self._extract_ngram_mfcc(data)
+        if (self.feature_type == 'melspectrogram'):
+            return self._extract_melspectrogram(data)
         
-    def _load_db_original_segments(self,measurement,microphone,array):
-        segments = list()
+    def _get_tmid(self,measurement,microphone,array):
         sql = ('''SELECT t.location FROM tmid t WHERE
                t.measurement = {:} AND
                t.array = {:} AND
@@ -95,99 +98,52 @@ class AircraftDatasetBuilder(object):
         result = self.dbcursor.fetchall()
                         
         if len(result) > 0:
-            tmid = result[0][0]
-            for i in range(4):
-                start = int((tmid - 4 + i*2)*self.fs) 
-                end = start + int(2*self.fs) # exactly 2 secs
-                segments.append((start,end))
-            
-        return segments
-              
-    def _load_db_largest_merge_segments(self,measurement,microphone,array):
-        segments = list()
-        sql = ('''SELECT t.location FROM tmid t WHERE
-               t.measurement = {:} AND
-               t.array = {:} AND
-               t.microphone = {:}''').format(measurement, array, microphone)
-        self.dbcursor.execute(sql)
-        result = self.dbcursor.fetchall()
-        
-        if len(result) > 0:                
-            tmid = result[0][0]
-            start = int((tmid - 4)*self.fs) 
-            end = int((tmid + 4)*self.fs)
-            segments.append((start,end))
-            
-        return segments
-      
-    def _extract_ngram_mfcc(self, data, size=(20,), d_factor=6):
-        mfcc_size = size[0]
-        data = decimate(data,d_factor)
-        spectrogram = librosa.feature.mfcc(np.asfortranarray(data),int(self.fs / d_factor),n_mfcc=mfcc_size,hop_length=512)
-        if len(size) > 1:
-            t_size = size[1]
-            if t_size > spectrogram.shape[1]:
-                spectrogram = np.pad(spectrogram,((0,0),(0,t_size - spectrogram.shape[1])),mode='edge')
-            else:
-                spectrogram[:,:t_size]
+            return result[0][0]
         else:
-            return spectrogram
-                   
-    def export_to_csv(self):
-        path = 'exports/' + datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")
-        os.mkdir(path)
+            raise Exception('''No tmid information found in DB for 
+                            measurement {}, array {} and microphone {}'''
+                            .format(measurement, array, microphone))
+
+    def _extract_melspectrogram(self, data):
+        # Mel spectrogram configuration
+        factor = 6
+        mfcc = 128
+        n_fft=1024
+        hop_length=512        
+        # Decimate signal by factor (reducing sampling rate)
+        data = decimate(data,factor)
+        # Computes mel spectrogram
+        spectrogram = librosa.feature.melspectrogram(np.asfortranarray(data),
+                                                     sr=int(self.fs/factor),
+                                                     n_fft=n_fft,
+                                                     hop_length=hop_length,
+                                                     n_mels=mfcc)
+        return spectrogram
     
-        for i in self.sets:
-            X = pd.DataFrame(np.array(self.sets[i]['X']), columns=['feature %d' % feature for feature in range(len(self.sets[i]['X'][0]))])
-            y = pd.DataFrame(np.array(self.sets[i]['y']), columns=['class'])
-            extra = pd.DataFrame(self.sets[i]['extra'], columns=['measurement'])
-            dataset = X.join(y).join(extra)
-            dataset.to_csv(path + '/segment_%d.csv' % i, index=False) 
+    def _create_root_folder(self):
+        self.root_path = 'exports/' + datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")
+        os.mkdir(self.root_path)
+    
+    def _create_category_folder(self,category):
+        path = os.path.join(self.root_path, str(category))
+        os.mkdir(path)
+        return path
+    
+    def _create_log(self):
+        if self.logged:
+            self.log_file = open(os.path.join(self.root_path, 'log.txt') ,'w')
+        
+    def _log_message(self,msg):
+        if self.logged:
+            print(msg)
+            self.log_file.write(msg + '\n')
+            
+    def _close_log(self,msg=None):
+        if self.logged:
+            if msg is not None:
+                self._log_message(msg)
+            self.log_file.close()
                     
-def aircraft_dataset_split(predictors, responses, measurements, holdout_pct=0.3, return_measurements=False):
-    '''
-        Splits the aircraft dataset into training and hold out sets.
-        It ensures the percentage of holdout samples of each class is the same.
-        For the traning set it includes all signals from a measurement but for
-        the holdout set only one random signal from each measurement is
-        included.
-    '''    
-    # Shuffles dataset
-    m = len(measurements)
-    i = np.random.permutation(range(m))
-    predictors = predictors[i,:]
-    responses = responses[i]
-    measurements = measurements[i]
-    # Splits dataset
-    train_obs = np.zeros(m,dtype=bool)
-    holdout_obs = np.zeros(m,dtype=bool)
-    classes = np.unique(responses)
-    for category in classes:
-        indexes = np.unique(measurements[responses == category])
-        indexes = np.random.permutation(indexes)
-        k = int(len(indexes) * (1 - holdout_pct))
-        # Training set
-        for index in indexes[:k]:
-            new_obs = (measurements == index)
-            train_obs = train_obs | new_obs
-        # Holdout set
-        for index in indexes[k:]:
-            new_obs = (measurements == index)
-            mask = np.random.permutation(new_obs.nonzero()[0])
-            new_obs[mask[:-1]] = False
-            holdout_obs = holdout_obs | new_obs
-    X = predictors[train_obs,:]           
-    y = responses[train_obs]   
-    X_holdout = predictors[holdout_obs,:]           
-    y_holdout = responses[holdout_obs]
-    takeoffs = measurements[train_obs]
-    takeoffs_holdout = measurements[holdout_obs]
-
-    if return_measurements:
-        return X,y,X_holdout,y_holdout,takeoffs,takeoffs_holdout
-    else:
-        return X,y,X_holdout,y_holdout
-
 class AircraftDatasetFoldIterator():
     '''
         Generates k-fold stratified folds for the aircraft dataset.
