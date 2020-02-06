@@ -6,7 +6,7 @@ import numpy as np
 from scipy.signal import spectrogram
 from scipy.signal import decimate
 import librosa
-from aircraft_tagger_utils import SoundPlayer, SoundHead
+from tmid_tagger_utils import SoundPlayer, SoundHead
 from multiprocessing import Pipe
     
 class AircraftTmidTagger(object):

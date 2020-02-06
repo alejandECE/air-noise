@@ -1,6 +1,7 @@
 #  Created by Luis Alejandro (alejand@umich.edu)
 import os
 import re
+import random
 import numpy as np
 import tensorflow as tf
 
@@ -28,6 +29,7 @@ class AircraftRecordBuilder(object):
                     sensor = groups[2]                    
                     # appending (url, class name, measurement id, array, sensor)
                     self.datafiles.append((url,label,measurement,array,sensor))
+        random.shuffle(self.datafiles)
     
     '''
         Generates a separate tfrecord file containing the serialized observations
