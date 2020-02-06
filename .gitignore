@@ -3,4 +3,6 @@
 *.txt
 *.zip
 *.csv
+*.npy
+*.tfrecord
 __pycache__
