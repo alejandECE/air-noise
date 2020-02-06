@@ -16,22 +16,18 @@ class AircraftRecordBuilder(object):
         # Stores path
         self.path = path
         # Reads all npy files found inside path
-        datafiles = []
-        labels = []
-        measurements = []
+        self.datafiles = []
         for root,_,files in os.walk(path):
             for file in files:
                 if '.npy' in file:
+                    groups = re.match(r'^m(\d+)a(\d+)s(\d+)',file).groups()
                     url = os.path.join(root,file)
-                    result = re.match(r"^m(\d+)a",file)
-                    # appending (url, measurement id and class name)
-                    datafiles.append(url)
-                    measurements.append(result.groups()[0])
-                    labels.append(os.path.split(root)[1])
-        # Stores list as numpy array for later use
-        self.datafiles = np.array(datafiles)
-        self.labels = np.array(labels)
-        self.measurements = np.array(measurements)
+                    label = os.path.split(root)[1]
+                    measurement = groups[0]
+                    array = groups[1]
+                    sensor = groups[2]                    
+                    # appending (url, class name, measurement id, array, sensor)
+                    self.datafiles.append((url,label,measurement,array,sensor))
     
     '''
         Generates a separate tfrecord file containing the serialized observations
@@ -45,22 +41,24 @@ class AircraftRecordBuilder(object):
         self.generate_tfrecord(train_set,'train.tfrecord')
         self.generate_tfrecord(test_set,'test.tfrecord')
     
-    
     '''
         Creates stratified training and test sets of the signals found in the
         input path 
     '''
     def generate_sets(self, test_pct):
         # Shuffles dataset
-        m = len(self.measurements)
-        i = np.random.permutation(range(m))
-        datafiles = self.datafiles[i]
-        labels = self.labels[i]
-        measurements = self.measurements[i]
+        measurements = []
+        labels = []
+        for _,label,measurement,_,_ in self.datafiles:
+            measurements.append(measurement)
+            labels.append(label)
+        measurements = np.array(measurements)
+        labels = np.array(labels)
+        classes = np.unique(labels)
         # Splits dataset
+        m = len(self.datafiles)
         train_obs = np.zeros(m,dtype=bool)
         test_obs = np.zeros(m,dtype=bool)
-        classes = np.unique(labels)
         for category in classes:
             indexes = np.unique(measurements[labels == category])
             indexes = np.random.permutation(indexes)
@@ -76,8 +74,8 @@ class AircraftRecordBuilder(object):
                 new_obs[mask[:-1]] = False
                 test_obs = test_obs | new_obs
                 
-        train_set = tuple(zip(datafiles[train_obs],labels[train_obs],measurements[train_obs]))
-        test_set = tuple(zip(datafiles[test_obs],labels[test_obs],measurements[test_obs]))        
+        train_set = [self.datafiles[i] for i in range(len(train_obs)) if train_obs[i]] 
+        test_set = [self.datafiles[i] for i in range(len(test_obs)) if test_obs[i]]
            
         return train_set, test_set
     
@@ -96,12 +94,15 @@ class AircraftRecordBuilder(object):
     ''' 
     def _serialize(self, observation):
         # Read npy file
-        url,label,measurement = observation
+        url,label,measurement,array,sensor = observation
         spectrogram = np.load(url)
         # Create a dictionary mapping the feature name to the tf.Example compatible data type
         feature = {
             'spec': tf.train.Feature(float_list=tf.train.FloatList(value=list(spectrogram.ravel()))),
-            'label': tf.train.Feature(bytes_list=tf.train.BytesList(value=[label.encode()]))
+            'label': tf.train.Feature(bytes_list=tf.train.BytesList(value=[label.encode()])),
+            'measurement': tf.train.Feature(bytes_list=tf.train.BytesList(value=[measurement.encode()])),
+            'array': tf.train.Feature(bytes_list=tf.train.BytesList(value=[array.encode()])),
+            'sensor': tf.train.Feature(bytes_list=tf.train.BytesList(value=[sensor.encode()]))            
         }        
         # Create a Features message using tf.train.Example
         example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
