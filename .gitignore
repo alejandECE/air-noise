@@ -5,4 +5,5 @@
 *.csv
 *.npy
 *.tfrecord
+*.h5
 __pycache__
