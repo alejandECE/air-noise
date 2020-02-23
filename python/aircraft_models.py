@@ -1,12 +1,13 @@
+#  Created by Luis Alejandro (alejand@umich.edu)
 import tensorflow as tf
 
 
-class AirBinaryTemporalCNN():
+class AirBinaryTemporalCNN:
   """
       Simple CNN model with two 1D conv layers followed by global max pooling
       and a fully connected layer.
 
-      Designed to perform binary classificaton on a simple dataset containing
+      Designed to perform binary classification on a simple dataset containing
       Airbus/Boeing aircraft take-off signals.
   """
 
@@ -53,12 +54,12 @@ class AirBinaryTemporalCNN():
     return self.model
 
 
-class AirMultinomialTemporalCNN():
+class AirMultinomialTemporalCNN:
   """
       Simple CNN model with two 1D conv layers followed by global max pooling
       and a fully connected layer.
 
-      Desgined to perform multinomial classificaton on a simple dataset
+      Desgined to perform multinomial classification on a simple dataset
       containing four classes of aircraft take-off signals.
   """
 
@@ -104,3 +105,13 @@ class AirMultinomialTemporalCNN():
     self.model = tf.keras.Model(inputs, outputs)
 
     return self.model
+
+
+class AirBinaryRNN:
+
+  def __init__(self, use_regularizer=True):
+    self.use_regularizer = use_regularizer
+    self.model = None
+
+  def build_model(self, input_shape):
+    pass

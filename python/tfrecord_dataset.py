@@ -15,6 +15,27 @@ feature_description = {
 }
 
 
+def serialize_observation(observation):
+  """
+      Serializes a single observation
+  """
+  # Read npy file
+  url, label, measurement, array, sensor = observation
+  spectrogram = np.load(url)
+  # Create a dictionary mapping the feature name to the tf.Example compatible data type
+  feature = {
+    'spec': tf.train.Feature(float_list=tf.train.FloatList(value=list(spectrogram.ravel()))),
+    'label': tf.train.Feature(bytes_list=tf.train.BytesList(value=[label.encode()])),
+    'measurement': tf.train.Feature(bytes_list=tf.train.BytesList(value=[measurement.encode()])),
+    'array': tf.train.Feature(bytes_list=tf.train.BytesList(value=[array.encode()])),
+    'sensor': tf.train.Feature(bytes_list=tf.train.BytesList(value=[sensor.encode()]))
+  }
+  # Create a Features message using tf.train.Example
+  example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
+
+  return example_proto.SerializeToString()
+
+
 class AircraftRecordBuilder(object):
   """
       Creates two records files (training/test)
@@ -99,26 +120,5 @@ class AircraftRecordBuilder(object):
     filepath = os.path.join(self.path, filename)
     with tf.io.TFRecordWriter(filepath) as writer:
       for obs in observations:
-        example = _serialize(obs)
+        example = serialize_observation(obs)
         writer.write(example)
-
-
-def _serialize(observation):
-  """
-      Serializes a single observation
-  """
-  # Read npy file
-  url, label, measurement, array, sensor = observation
-  spectrogram = np.load(url)
-  # Create a dictionary mapping the feature name to the tf.Example compatible data type
-  feature = {
-    'spec': tf.train.Feature(float_list=tf.train.FloatList(value=list(spectrogram.ravel()))),
-    'label': tf.train.Feature(bytes_list=tf.train.BytesList(value=[label.encode()])),
-    'measurement': tf.train.Feature(bytes_list=tf.train.BytesList(value=[measurement.encode()])),
-    'array': tf.train.Feature(bytes_list=tf.train.BytesList(value=[array.encode()])),
-    'sensor': tf.train.Feature(bytes_list=tf.train.BytesList(value=[sensor.encode()]))
-  }
-  # Create a Features message using tf.train.Example
-  example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
-
-  return example_proto.SerializeToString()
