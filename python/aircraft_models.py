@@ -34,11 +34,13 @@ class AirBinaryTemporalCNN:
     # the previous convolutional layer filters. Technically answer where
     # (in time) the filter generated the strongest output.
     pooling1 = tf.keras.layers.GlobalMaxPooling1D()
+    # Dropout layer
+    dropout1 = tf.keras.layers.Dropout(0.1)
     # Dense connecting layers to perform classification
     if self.use_regularizer:
       dense1 = tf.keras.layers.Dense(1, activation=tf.nn.sigmoid,
                                      kernel_regularizer=
-                                     tf.keras.regularizers.l2(0.1))
+                                     tf.keras.regularizers.l2(0.3))
     else:
       dense1 = tf.keras.layers.Dense(1, activation=tf.nn.sigmoid)
 
@@ -47,6 +49,8 @@ class AirBinaryTemporalCNN:
     x = conv1(inputs)
     x = conv2(x)
     x = pooling1(x)
+    if self.use_regularizer:
+      x = dropout1(x)
     outputs = dense1(x)
 
     self.model = tf.keras.Model(inputs, outputs)
@@ -87,11 +91,13 @@ class AirMultinomialTemporalCNN:
     # the previous convolutional layer filters. Technically answer where
     # (in time) the filter generated the strongest output.
     pooling1 = tf.keras.layers.GlobalMaxPooling1D()
+    # Dropout layer
+    dropout1 = tf.keras.layers.Dropout(0.1)
     # Dense connecting layers to perform classification
     if self.use_regularizer:
       dense1 = tf.keras.layers.Dense(self.categories, activation=tf.nn.softmax,
                                      kernel_regularizer=
-                                     tf.keras.regularizers.l2(0.1))
+                                     tf.keras.regularizers.l2(0.3))
     else:
       dense1 = tf.keras.layers.Dense(self.categories, activation=tf.nn.softmax)
 
@@ -100,6 +106,8 @@ class AirMultinomialTemporalCNN:
     x = conv1(inputs)
     x = conv2(x)
     x = pooling1(x)
+    if self.use_regularizer:
+      x = dropout1(x)
     outputs = dense1(x)
 
     self.model = tf.keras.Model(inputs, outputs)
@@ -108,7 +116,12 @@ class AirMultinomialTemporalCNN:
 
 
 class AirBinaryRNN:
+  """
+      Simple recurrent neural network model using a sequence of spectrogram windows
 
+      Designed to perform binary classification on a simple dataset containing
+      Airbus/Boeing aircraft take-off signals.
+  """
   def __init__(self, use_regularizer=True):
     self.use_regularizer = use_regularizer
     self.model = None
