@@ -8,6 +8,8 @@ import tensorflow as tf
 # Dictionary containing features description for parsing purposes
 feature_description = {
   'spec': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True, default_value=[0.0]),
+  'mfcc': tf.io.FixedLenFeature([], tf.int64),
+  'samples': tf.io.FixedLenFeature([],tf.int64),
   'label': tf.io.FixedLenFeature([], tf.string, default_value=''),
   'measurement': tf.io.FixedLenFeature([], tf.string, default_value=''),
   'array': tf.io.FixedLenFeature([], tf.string, default_value=''),
@@ -22,9 +24,12 @@ def serialize_observation(observation):
   # Read npy file
   url, label, measurement, array, sensor = observation
   spectrogram = np.load(url)
+  mfcc, samples = spectrogram.shape
   # Create a dictionary mapping the feature name to the tf.Example compatible data type
   feature = {
     'spec': tf.train.Feature(float_list=tf.train.FloatList(value=list(spectrogram.ravel()))),
+    'mfcc': tf.train.Feature(int64_list=tf.train.Int64List(value=[mfcc])),
+    'samples': tf.train.Feature(int64_list=tf.train.Int64List(value=[samples])),
     'label': tf.train.Feature(bytes_list=tf.train.BytesList(value=[label.encode()])),
     'measurement': tf.train.Feature(bytes_list=tf.train.BytesList(value=[measurement.encode()])),
     'array': tf.train.Feature(bytes_list=tf.train.BytesList(value=[array.encode()])),

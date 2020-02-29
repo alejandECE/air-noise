@@ -19,18 +19,22 @@ class AircraftFeaturesExtractor(object):
                fs,
                feature_type='melspectrogram',
                segmentation=None,
-               export='npy',
-               arrays=[1, 2, 3],
-               microphones=[1, 2, 3, 4],
+               arrays=None,
+               microphones=None,
                logged=True):
-
     self.fs = fs
     self.dbcursor = dbcursor
     self.classes = classes
     self.feature_type = feature_type
     self.segmentation = segmentation
-    self.arrays = arrays
-    self.microphones = microphones
+    if arrays is None:
+      self.arrays = [1, 2, 3]
+    else:
+      self.arrays = arrays
+    if microphones is None:
+      self.microphones = [1, 2, 3, 4]
+    else:
+      self.microphones = microphones
     self.logged = logged
 
   def build(self):
