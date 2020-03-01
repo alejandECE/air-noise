@@ -4,11 +4,11 @@ import tensorflow as tf
 
 class AirBinaryTemporalCNN:
   """
-      Simple CNN model with two 1D conv layers followed by global max pooling
-      and a fully connected layer.
+  Simple CNN model with two 1D conv layers followed by global max pooling
+  and a fully connected layer.
 
-      Designed to perform binary classification on a simple dataset containing
-      Airbus/Boeing aircraft take-off signals.
+  Designed to perform binary classification on a simple dataset containing
+  Airbus/Boeing aircraft take-off signals.
   """
 
   def __init__(self, use_regularizer=True):
@@ -17,7 +17,7 @@ class AirBinaryTemporalCNN:
 
   def build_model(self, input_shape):
     """
-        Builds tf.keras model
+    Builds tf.keras model
     """
     # A 1D convolutional layer looking for timeline pattern in the original
     # spectrogram. Filters have 50% overlap in the time axis.
@@ -60,11 +60,11 @@ class AirBinaryTemporalCNN:
 
 class AirMultinomialTemporalCNN:
   """
-      Simple CNN model with two 1D conv layers followed by global max pooling
-      and a fully connected layer.
+  Simple CNN model with two 1D conv layers followed by global max pooling
+  and a fully connected layer.
 
-      Designed to perform multinomial classification on a simple dataset
-      containing four classes of aircraft take-off signals.
+  Designed to perform multinomial classification on a simple dataset
+  containing four classes of aircraft take-off signals.
   """
 
   def __init__(self, categories, use_regularizer=True):
@@ -74,7 +74,7 @@ class AirMultinomialTemporalCNN:
 
   def build_model(self, input_shape):
     """
-        Builds tf.keras model
+    Builds tf.keras model
     """
     # A 1D convolutional layer looking for timeline pattern in the original
     # spectrogram. Filters have 50% overlap in the time axis.
@@ -115,37 +115,73 @@ class AirMultinomialTemporalCNN:
 
 
 class SpecSequence(tf.keras.layers.Layer):
-  def __init__(self, window: int, overlapping=0.5, name='Sequencer', **kwargs):
+  """
+  A non-trainable layer to generate a sequence of potentially overlapping window from an input spectrogram.
+  Inputs are expected to be (batch, freq, time)
+  Outputs will be (batch, windows, freq, time)
+  """
+  def __init__(self, window_size: int, window_overlap=0.5, name='Sequencer', **kwargs):
     super(SpecSequence, self).__init__(name=name, **kwargs)
-    self.window = window
-    self.overlapping = overlapping
+    # Config to determine sequences
+    self.window_size = window_size
+    self.window_overlap = window_overlap
+    # Items related to the input/output shape
+    self.indexes = None
+    self.channels = None
+    self.mfcc = None
+    self.length = None
+    # Not trainable layer
     self.trainable = False
 
+  def build(self, input_shape):
+    # Determines indexes for slicing
+    samples = input_shape[2]
+    step = int(self.window_size * (1.0 - self.window_overlap))
+    start = tf.range(0, samples - self.window_size, step)
+    end = tf.range(self.window_size, samples, step)
+    self.indexes = tf.stack([start, end], axis=1)
+    self.length = start.shape[0]
+    self.channels = input_shape[-1]
+    self.mfcc = input_shape[0]
+
   def call(self, inputs):
-    samples = tf.shape(inputs)[1]
-    step = int(self.window * (1.0 - self.overlapping))
-    start = tf.range(0, samples - self.window, step)
-    end = tf.range(self.window, samples, step)
-    sequence = tf.map_fn(lambda index: inputs[:, index[0]:index[1]],
-                         tf.stack([start, end], axis=1),
+    # Check slices indexes are generated already
+    if self.indexes is None:
+      raise Exception('You must build the layer before calling it.')
+    # Get slices from input
+    sequence = tf.map_fn(lambda index: inputs[:, :, index[0]:index[1], :],
+                         self.indexes,
                          back_prop=False,
                          dtype=tf.float32)
-    return sequence
+    # Set proper output shape
+    output = tf.transpose(sequence, perm=[1, 0, 2, 3, 4])
+    shape = tf.TensorShape(
+      [None, self.length, self.mfcc, self.window_size, self.channels]
+    )
+    output.set_shape(shape)
+    return output
 
 
 class AirBinaryRNN:
   """
-      Simple recurrent neural network model using a sequence of spectrogram windows
+  Simple recurrent neural network model using a sequence of spectrogram windows. The input of this model
+  will be a sequence of overlapping spectrogram slices (windows).
 
-      Designed to perform binary classification on a simple dataset containing
-      Airbus/Boeing aircraft take-off signals.
+  Designed to perform binary classification on a simple dataset containing
+  Airbus/Boeing aircraft take-off signals.
   """
 
-  def __init__(self, use_regularizer=True):
+  def __init__(self, use_regularizer=True, use_sequencer=False, window_size=50, window_overlap=0.5):
     self.use_regularizer = use_regularizer
+    self.use_sequencer = use_sequencer
+    self.window_size = window_size
+    self.window_overlap = window_overlap
     self.model = None
 
   def build_model(self, input_shape):
+    # Creates the sequencer layer if requested
+    if self.use_sequencer:
+      sequencer1 = SpecSequence(self.window_size, self.window_overlap)
     # First convolutional layer to find spatial features in a segment of the spectrogram. Timed distributed to get
     # applied to every segment of the inputted spectrogram.
     conv1 = tf.keras.layers.TimeDistributed(
@@ -189,7 +225,11 @@ class AirBinaryRNN:
 
     # Create connections and returns model
     inputs = tf.keras.layers.Input(input_shape)
-    x = conv1(inputs)
+    if self.use_sequencer:
+      x = sequencer1(inputs)
+      x = conv1(x)
+    else:
+      x = conv1(inputs)
     x = pooling1(x)
     x = conv2(x)
     x = pooling2(x)
@@ -207,18 +247,25 @@ class AirBinaryRNN:
 
 class AirMultinomialRNN:
   """
-      Simple recurrent neural network model using a sequence of spectrogram windows
+  Simple recurrent neural network model using a sequence of spectrogram windows. The input of this model
+  will be a sequence of overlapping spectrogram slices (windows).
 
-      Designed to perform multinomial classification on a simple dataset
-      containing four classes of aircraft take-off signals.
+  Designed to perform multinomial classification on a simple dataset
+  containing four classes of aircraft take-off signals.
   """
 
-  def __init__(self, categories, use_regularizer=True):
-    self.use_regularizer = use_regularizer
+  def __init__(self, categories, use_regularizer=True, use_sequencer=False, window_size=50, window_overlap=0.5):
     self.categories = categories
+    self.use_regularizer = use_regularizer
+    self.use_sequencer = use_sequencer
+    self.window_size = window_size
+    self.window_overlap = window_overlap
     self.model = None
 
   def build_model(self, input_shape):
+    # Creates the sequencer layer if requested
+    if self.use_sequencer:
+      sequencer1 = SpecSequence(self.window_size, self.window_overlap)
     # First convolutional layer to find spatial features in a segment of the spectrogram. Timed distributed to get
     # applied to every segment of the inputted spectrogram.
     conv1 = tf.keras.layers.TimeDistributed(
@@ -265,7 +312,11 @@ class AirMultinomialRNN:
 
     # Create connections and returns model
     inputs = tf.keras.layers.Input(input_shape)
-    x = conv1(inputs)
+    if self.use_sequencer:
+      x = sequencer1(inputs)
+      x = conv1(x)
+    else:
+      x = conv1(inputs)
     x = pooling1(x)
     x = conv2(x)
     x = pooling2(x)

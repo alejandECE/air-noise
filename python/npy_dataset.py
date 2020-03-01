@@ -61,6 +61,7 @@ class AircraftFeaturesExtractor(object):
     except:
       # Logging
       self._close_log('An exception occurred...')
+      return
     # Logging
     self._close_log('Done processing measurements!')
 
