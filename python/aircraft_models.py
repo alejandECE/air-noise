@@ -120,6 +120,7 @@ class SpecSequence(tf.keras.layers.Layer):
   Inputs are expected to be (batch, freq, time)
   Outputs will be (batch, windows, freq, time)
   """
+
   def __init__(self, window_size: int, window_overlap=0.5, name='Sequencer', **kwargs):
     super(SpecSequence, self).__init__(name=name, **kwargs)
     # Config to determine sequences
@@ -293,7 +294,7 @@ class AirMultinomialRNN:
       name='Flatten'
     )
     # Dropout layer
-    dropout1 = tf.keras.layers.Dropout(0.4)
+    dropout1 = tf.keras.layers.Dropout(0.2)
     # Recurrent layer to capture temporal relationships
     lstm1 = tf.keras.layers.Bidirectional(
       tf.keras.layers.LSTM(32, return_state=False, return_sequences=True),
