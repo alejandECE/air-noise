@@ -8,3 +8,6 @@
 *.h5
 __pycache__
 .idea/
+*.data*
+*.index
+*.pb
