@@ -19,7 +19,7 @@ feature_description = {
 
 def serialize_observation(observation):
   """
-      Serializes a single observation
+  Serializes a single observation
   """
   # Read npy file
   url, label, measurement, array, sensor = observation
@@ -43,11 +43,10 @@ def serialize_observation(observation):
 
 class AircraftRecordBuilder(object):
   """
-      Creates two records files (training/test)
-      It ensures the percentage of test samples of each class is the same.
-      For the traning set it includes all signals from a measurement but for
-      the test set only one random signal from each measurement is
-      included.
+  Creates two records files (training/test)
+  It ensures the percentage of test samples of each class is the same.
+  For the training set it includes all signals from a measurement but for
+  the test set only one random signal from each measurement is included.
   """
 
   def __init__(self, path):
@@ -70,9 +69,9 @@ class AircraftRecordBuilder(object):
 
   def build(self, test_pct=0.2):
     """
-        Generates a separate tfrecord file containing the serialized observations
-        for each stratified set (training & test) generated from the signals
-        found in the input path.
+    Generates a separate tfrecord file containing the serialized observations
+    for each stratified set (training & test) generated from the signals
+    found in the input path.
     """
     # generate sets of files
     train_set, test_set = self.generate_sets(test_pct)
@@ -82,8 +81,8 @@ class AircraftRecordBuilder(object):
 
   def generate_sets(self, test_pct):
     """
-        Creates stratified training and test sets of the signals found in the
-        input path
+    Creates stratified training and test sets of the signals found in the
+    input path
     """
     # Shuffles dataset
     measurements = []
@@ -120,7 +119,7 @@ class AircraftRecordBuilder(object):
 
   def generate_tfrecord(self, observations, filename):
     """
-        Generates a tfrecord file containing the serialized observations
+    Generates a tfrecord file containing the serialized observations
     """
     filepath = os.path.join(self.path, filename)
     with tf.io.TFRecordWriter(filepath) as writer:

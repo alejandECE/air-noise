@@ -9,8 +9,8 @@ from scipy.signal import decimate
 
 class AircraftFeaturesExtractor(object):
   """
-      Extracts specified features from TDMS files (grouped by some class)
-      and exports features to a single file per signal per measurement
+  Extracts specified features from TDMS files (grouped by some class)
+  and exports features to a single file per signal per measurement
   """
 
   def __init__(self,
@@ -39,7 +39,7 @@ class AircraftFeaturesExtractor(object):
 
   def build(self):
     """
-        Goes through every class generating the corresponding npy files
+    Goes through every class generating the corresponding npy files
     """
     # Creates a folder to store dataset
     self._create_root_folder()
@@ -67,8 +67,8 @@ class AircraftFeaturesExtractor(object):
 
   def _process_measurements(self, measurements, category):
     """
-        For every measurement in the input, reads every signal and extracts the corresponding features, storing the
-        results in a npy file.
+    For every measurement in the input, reads every signal and extracts the corresponding features, storing the
+    results in a npy file.
     """
     # Logging
     self._log_message('\tMeasurements included:')
@@ -101,14 +101,14 @@ class AircraftFeaturesExtractor(object):
 
   def _extract_features(self, data):
     """
-        Extracts the actual mel-spectrogram for the given data
+    Extracts the actual mel-spectrogram for the given data
     """
     if self.feature_type == 'melspectrogram':
       return self._extract_melspectrogram(data)
 
   def _get_tmid(self, measurement, array, microphone):
     """
-        Gets the tmid point from the dataset for the given measurement, array and microphone
+    Gets the tmid point from the dataset for the given measurement, array and microphone
     """
     sql = ('''SELECT t.location FROM tmid t WHERE
                t.measurement = {:} AND
@@ -165,14 +165,14 @@ class AircraftFeaturesExtractor(object):
       self.log_file.close()
 
 
-class AircraftDatasetFoldIterator():
+class AircraftDatasetFoldIterator:
   """
-      Generates k-fold stratified folds for the aircraft dataset.
+  Generates k-fold stratified folds for the aircraft dataset.
 
-      It ensures the number of samples per class on each fold is as even as
-      possible. During validation for traning it includes all signals from a
-      measurement but for test only one random signal from each measurement
-      is included.
+  It ensures the number of samples per class on each fold is as even as
+  possible. During validation for traning it includes all signals from a
+  measurement but for test only one random signal from each measurement
+  is included.
   """
 
   def __init__(self, X, y, measurements, folds=5):

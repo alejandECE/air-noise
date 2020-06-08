@@ -6,7 +6,7 @@ import numpy as np
 from scipy.signal import spectrogram
 from scipy.signal import decimate
 import librosa
-from tmid_tagger_utils import SoundPlayer, SoundHead
+from tagger.tmid_tagger_utils import SoundPlayer, SoundHead
 from multiprocessing import Pipe
 
 
@@ -131,7 +131,7 @@ class AircraftTmidTagger(object):
     dbcursor.execute(sql)
     results = dbcursor.fetchall()
     url = results[0][0]
-    self.tdms = TdmsFile("../../datasets/classification/noise/" + url)
+    self.tdms = TdmsFile("../../../../datasets/classification/noise/" + url)
     self._measurement = measurement
 
   # Loads time series data for current signal (measurement, array, microphone)
