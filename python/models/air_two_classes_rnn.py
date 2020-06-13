@@ -5,7 +5,7 @@ from typing import Tuple
 import tensorflow as tf
 from tfrecord_dataset import feature_description
 from spec_sequencer import SpecSequencer
-import sys
+from utils import display_performance
 
 # Constants
 AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -72,10 +72,11 @@ class AirBinaryRNN:
   Airbus/Boeing aircraft take-off signals.
   """
 
-  def __init__(self, regularize=True, sequencer=False):
+  def __init__(self, regularize=True, batch_norm=False, sequencer=False):
     # Stores options
     self.regularize = regularize
     self.sequencer = sequencer
+    self.batch_norm = batch_norm
     # Builds model architecture
     self.model = self.build_model()
     # Selects loss and metric
@@ -87,67 +88,87 @@ class AirBinaryRNN:
 
   # Builds models architecture returning a tf.keras.Model
   def build_model(self) -> tf.keras.Model:
-    # Creates the sequencer layer if requested
+    # Create inputs
     if self.sequencer:
-      sequencer1 = SpecSequencer(WINDOW_SIZE, WINDOW_OVERLAP)
+      inputs = tf.keras.layers.Input((MFCC_SIZE, TIME_SIZE, 1))
+    else:
+      inputs = tf.keras.layers.Input((None, MFCC_SIZE, WINDOW_SIZE, 1))
+
+    # Creates the sequencer layer (only used if requested)
+    sequencer1 = SpecSequencer(WINDOW_SIZE, WINDOW_OVERLAP)
+
     # First convolutional layer to find spatial features in a segment of the spectrogram. Timed distributed to get
     # applied to every segment of the inputted spectrogram.
     conv1 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.Conv2D(32, 5, padding='valid', activation=tf.nn.relu, data_format='channels_last'),
       name='Conv1'
     )
+
     # Pooling
     pooling1 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.MaxPool2D(3),
       name='Pool1'
     )
+
+    # Batch norm layer (only used if requested)
+    batch_norm1 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm1')
+
     # Second convolutional layer. Timed distributed to get applied to every segment of the inputted spectrogram.
     conv2 = tf.keras.layers.TimeDistributed(
-      tf.keras.layers.Conv2D(32, 5, padding='valid', activation=tf.nn.relu, data_format='channels_last'),
+      tf.keras.layers.Conv2D(32, 5,
+                             padding='valid',
+                             activation=tf.nn.relu,
+                             data_format='channels_last'),
       name='Conv2'
     )
+
     # Pooling
     pooling2 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.MaxPool2D(3),
       name='Pool2'
     )
+
     # Flatten results from convolutions/pooling to be fed to the lstm layers
     flatten1 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.Flatten(),
       name='Flatten'
     )
+
+    # Batch norm layer (only used if requested)
+    batch_norm2 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm2')
+
     # Dropout layer
     dropout1 = tf.keras.layers.Dropout(0.3)
+
     # Recurrent layer to capture temporal relationships
-    lstm1 = tf.keras.layers.LSTM(32, return_state=False, return_sequences=False)
+    lstm1 = tf.keras.layers.LSTM(32,
+                                 return_state=False,
+                                 return_sequences=False)
+
     # Dropout layer
     dropout2 = tf.keras.layers.Dropout(0.1)
+
     # Dense to make the final classification
-    if self.regularize:
-      dense1 = tf.keras.layers.Dense(1, activation=tf.nn.sigmoid,
-                                     kernel_regularizer=
-                                     tf.keras.regularizers.l2(0.3),
-                                     name='Dense')
-    else:
-      dense1 = tf.keras.layers.Dense(1, activation=tf.nn.sigmoid, name='Dense')
+    dense1 = tf.keras.layers.Dense(1, activation=tf.nn.sigmoid,
+                                   kernel_regularizer=tf.keras.regularizers.l2(0.3) if self.regularize else None,
+                                   name='Dense')
 
-    # Create connections and returns model
-    if self.sequencer:
-      inputs = tf.keras.layers.Input((MFCC_SIZE, TIME_SIZE, 1))
-    else:
-      inputs = tf.keras.layers.Input((None, MFCC_SIZE, WINDOW_SIZE, 1))
-
+    # Creates connections between layers of the model
     if self.sequencer:
       x = sequencer1(inputs)
       x = conv1(x)
     else:
       x = conv1(inputs)
     x = pooling1(x)
+    if self.batch_norm:
+      x = batch_norm1(x)
     x = conv2(x)
     x = pooling2(x)
     x = flatten1(x)
     if self.regularize:
       x = dropout1(x)
+    if self.batch_norm:
+      x = batch_norm2(x)
     x = lstm1(x)
     if self.regularize:
       x = dropout2(x)
@@ -156,34 +177,45 @@ class AirBinaryRNN:
     return tf.keras.Model(inputs, outputs)
 
   # Prints out the model's summary
-  def summary(self):
+  def summary(self) -> None:
     self.model.summary()
 
   # Trains model
-  def fit(self, train_record: str, test_record: str, epochs):
+  def fit(self, train_record: str, test_record: str, epochs: int):
     # Creates train/test datasets using tf.data.Dataset
     train_ds, test_ds = create_dataset(train_record, test_record, self.sequencer)
 
-    # Trains model using tf.keras.Model fit function
-    self.model.fit(train_ds, epochs=epochs, validation_data=test_ds, verbose=2)
+    # Callback (used in tf.keras.Model.fit) to save the model with the best validation accuracy
+    checkpoint = tf.keras.callbacks.ModelCheckpoint(
+      filepath='trained_model/air_two_classes_rnn/',
+      save_best_only=True,
+      save_weights_only=False,
+      monitor='val_loss',
+      save_freq='epoch'
+    )
 
-  def save(self, path):
+    # Trains model using tf.keras.Model fit function
+    self.model.fit(train_ds,
+                   epochs=epochs,
+                   validation_data=test_ds,
+                   callbacks=[checkpoint],
+                   verbose=2)
+
+  def save(self, path: str) -> None:
     self.model.save(path)
 
 
 if __name__ == '__main__':
-  # Parse arguments
-  if len(sys.argv) < 3:
-    train_file = '../exports/2020-02-03 11-55-25/train.tfrecord'
-    test_file = '../exports/2020-02-03 11-55-25/test.tfrecord'
-  else:
-    train_file = sys.argv[1]
-    test_file = sys.argv[2]
+  # Dataset files
+  train_file = '../exports/2020-02-03 11-55-25/train.tfrecord'
+  test_file = '../exports/2020-02-03 11-55-25/test.tfrecord'
 
   # Creates model and trains
-  model = AirBinaryRNN(sequencer=True)
+  model = AirBinaryRNN(sequencer=True, batch_norm=True)
   model.summary()
   model.fit(train_file, test_file, 100)
 
-  # Saves model
-  model.save('trained_model/air_binary_rnn/')
+  # Loads and evaluates model
+  saved = tf.keras.models.load_model('trained_model/air_two_classes_rnn/')
+  training_ds, testing_ds = create_dataset(train_file, test_file, sequencer=True)
+  display_performance(saved, training_ds, testing_ds)
