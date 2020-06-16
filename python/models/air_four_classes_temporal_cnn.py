@@ -32,12 +32,12 @@ def parse_observation(example: tf.Tensor) -> Tuple:
 # Creates dataset from tfrecord files
 def create_dataset(train_record: str, test_record: str) -> Tuple:
   # Creates training data pipeline
-  train_ds = tf.data.TFRecordDataset([train_record]).cache()
+  train_ds = tf.data.TFRecordDataset([train_record])
   train_ds = train_ds.map(parse_observation, num_parallel_calls=AUTOTUNE).cache()
   train_ds = train_ds.shuffle(BUFFER_SIZE).batch(BATCH_SIZE).prefetch(1)
 
   # Creates test data pipeline
-  test_ds = tf.data.TFRecordDataset([test_record]).cache()
+  test_ds = tf.data.TFRecordDataset([test_record])
   test_ds = test_ds.map(parse_observation, num_parallel_calls=AUTOTUNE).cache()
   test_ds = test_ds.batch(BATCH_SIZE).prefetch(1)
 
@@ -53,7 +53,7 @@ class AirMulticlassTemporalCNN:
   containing four classes of aircraft take-off signals.
   """
 
-  def __init__(self, categories, regularize=True, batch_norm=False):
+  def __init__(self, categories: int, regularize=True, batch_norm=False):
     # Stores options
     self.categories = categories
     self.regularize = regularize

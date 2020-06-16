@@ -50,7 +50,7 @@ def parse_observation(example: tf.Tensor) -> Tuple:
 # Creates dataset from tfrecord files
 def create_dataset(train_record: str, test_record: str, sequencer=False) -> Tuple:
   # Creates training data pipeline
-  train_ds = tf.data.TFRecordDataset([train_record]).cache()
+  train_ds = tf.data.TFRecordDataset([train_record])
   train_ds = train_ds.map(parse_observation, num_parallel_calls=AUTOTUNE).cache()
   if not sequencer:
     train_ds = train_ds.map(build_sequence, num_parallel_calls=AUTOTUNE).cache()
@@ -75,7 +75,7 @@ class AirMulticlassRNN:
   containing four classes of aircraft take-off signals.
   """
 
-  def __init__(self, categories, regularize=True, batch_norm=False, sequencer=False):
+  def __init__(self, categories: int, regularize=True, batch_norm=False, sequencer=False):
     # Stores options
     self.categories = categories
     self.regularize = regularize
@@ -126,7 +126,7 @@ class AirMulticlassRNN:
       name='Conv2'
     )
 
-    # Second convolutional layer. Timed distributed.
+    # Third convolutional layer. Timed distributed.
     conv3 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.Conv2D(32, 5,
                              padding='valid',

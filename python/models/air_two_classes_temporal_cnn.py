@@ -29,7 +29,7 @@ def parse_observation(example: tf.Tensor) -> Tuple:
 # Creates dataset from tfrecord files
 def create_dataset(train_record: str, test_record: str) -> Tuple:
   # Creates training data pipeline
-  train_ds = tf.data.TFRecordDataset([train_record]).cache()
+  train_ds = tf.data.TFRecordDataset([train_record])
   train_ds = train_ds.map(parse_observation, num_parallel_calls=AUTOTUNE).cache()
   train_ds = train_ds.shuffle(BUFFER_SIZE).batch(BATCH_SIZE).prefetch(1)
 
