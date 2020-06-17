@@ -93,10 +93,8 @@ class AirBinaryRNN:
       inputs = tf.keras.layers.Input((MFCC_SIZE, TIME_SIZE, 1))
     else:
       inputs = tf.keras.layers.Input((None, MFCC_SIZE, WINDOW_SIZE, 1))
-
     # Creates the sequencer layer (only used if requested)
     sequencer1 = SpecSequencer(WINDOW_SIZE, WINDOW_OVERLAP)
-
     # First convolutional layer to find spatial features in a segment of the spectrogram. Timed distributed to get
     # applied to every segment of the inputted spectrogram.
     conv1 = tf.keras.layers.TimeDistributed(
@@ -109,10 +107,8 @@ class AirBinaryRNN:
       tf.keras.layers.MaxPool2D(3),
       name='Pool1'
     )
-
     # Batch norm layer (only used if requested)
     batch_norm1 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm1')
-
     # Second convolutional layer. Timed distributed to get applied to every segment of the inputted spectrogram.
     conv2 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.Conv2D(32, 5,
@@ -121,38 +117,30 @@ class AirBinaryRNN:
                              data_format='channels_last'),
       name='Conv2'
     )
-
     # Pooling
     pooling2 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.MaxPool2D(3),
       name='Pool2'
     )
-
     # Flatten results from convolutions/pooling to be fed to the lstm layers
     flatten1 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.Flatten(),
       name='Flatten'
     )
-
     # Batch norm layer (only used if requested)
     batch_norm2 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm2')
-
     # Dropout layer
     dropout1 = tf.keras.layers.Dropout(0.3)
-
     # Recurrent layer to capture temporal relationships
     lstm1 = tf.keras.layers.LSTM(32,
                                  return_state=False,
                                  return_sequences=False)
-
     # Dropout layer
     dropout2 = tf.keras.layers.Dropout(0.1)
-
     # Dense to make the final classification
     dense1 = tf.keras.layers.Dense(1, activation=tf.nn.sigmoid,
                                    kernel_regularizer=tf.keras.regularizers.l2(0.3) if self.regularize else None,
                                    name='Dense')
-
     # Creates connections between layers of the model
     if self.sequencer:
       x = sequencer1(inputs)
@@ -165,20 +153,22 @@ class AirBinaryRNN:
     x = conv2(x)
     x = pooling2(x)
     x = flatten1(x)
-    if self.regularize:
-      x = dropout1(x)
     if self.batch_norm:
       x = batch_norm2(x)
+    if self.regularize:
+      x = dropout1(x)
     x = lstm1(x)
     if self.regularize:
       x = dropout2(x)
     outputs = dense1(x)
-
     return tf.keras.Model(inputs, outputs)
 
   # Prints out the model's summary
   def summary(self) -> None:
     self.model.summary()
+    tf.keras.utils.plot_model(self.model,
+                              to_file='diagrams/air_two_classes_rnn.jpg',
+                              expand_nested=True, show_shapes=True)
 
   # Trains model
   def fit(self, train_record: str, test_record: str, epochs: int):

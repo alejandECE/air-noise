@@ -97,26 +97,21 @@ class AirMulticlassRNN:
       inputs = tf.keras.layers.Input((MFCC_SIZE, TIME_SIZE, 1))
     else:
       inputs = tf.keras.layers.Input((None, MFCC_SIZE, WINDOW_SIZE, 1))
-
     # Creates the sequencer layer (only used if requested)
     sequencer1 = SpecSequencer(WINDOW_SIZE, WINDOW_OVERLAP)
-
     # First convolutional layer to find spatial features in a segment of the spectrogram. Timed distributed to get
     # applied to every segment of the inputted spectrogram.
     conv1 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.Conv2D(32, 5, padding='valid', activation=tf.nn.relu, data_format='channels_last'),
       name='Conv1'
     )
-
     # Pooling
     pooling1 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.MaxPool2D(3),
       name='Pool1'
     )
-
     # Batch norm layer (only used if requested)
     batch_norm1 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm1')
-
     # Second convolutional layer. Timed distributed to get applied to every segment of the inputted spectrogram.
     conv2 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.Conv2D(32, 5,
@@ -125,7 +120,6 @@ class AirMulticlassRNN:
                              data_format='channels_last'),
       name='Conv2'
     )
-
     # Third convolutional layer. Timed distributed.
     conv3 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.Conv2D(32, 5,
@@ -134,38 +128,28 @@ class AirMulticlassRNN:
                              data_format='channels_last'),
       name='Conv3'
     )
-
     # Pooling
     pooling2 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.MaxPool2D(3),
       name='Pool2'
     )
-
     # Flatten results from convolutions/pooling to be fed to the lstm layers
     flatten1 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.Flatten(),
       name='Flatten'
     )
-
     # Batch norm layer (only used if requested)
     batch_norm2 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm2')
-
     # Dropout layer
     dropout1 = tf.keras.layers.Dropout(0.3)
-
     # Recurrent layer to capture temporal relationships
-    lstm1 = tf.keras.layers.LSTM(32,
-                                 return_state=False,
-                                 return_sequences=False)
-
+    lstm1 = tf.keras.layers.LSTM(32, return_state=False, return_sequences=False)
     # Dropout layer
     dropout2 = tf.keras.layers.Dropout(0.2)
-
     # Dense to make the final classification
     dense1 = tf.keras.layers.Dense(self.categories, activation=tf.nn.softmax,
                                    kernel_regularizer=tf.keras.regularizers.l2(0.01) if self.regularize else None,
                                    name='Dense')
-
     # Creates connections between layers of the model
     if self.sequencer:
       x = sequencer1(inputs)
@@ -187,12 +171,14 @@ class AirMulticlassRNN:
     if self.regularize:
       x = dropout2(x)
     outputs = dense1(x)
-
     return tf.keras.Model(inputs, outputs)
 
   # Prints out the model's summary
   def summary(self):
     self.model.summary()
+    tf.keras.utils.plot_model(self.model,
+                              to_file='diagrams/air_four_classes_rnn.jpg',
+                              expand_nested=True, show_shapes=True)
 
   # Trains model
   def fit(self, train_record: str, test_record: str, epochs: int):
@@ -227,7 +213,7 @@ if __name__ == '__main__':
   # Creates model and trains
   model = AirMulticlassRNN(4, sequencer=True, batch_norm=False)
   model.summary()
-  model.fit(train_file, test_file, 100)
+  # model.fit(train_file, test_file, 100)
 
   # Loads and evaluates model
   saved = tf.keras.models.load_model('trained_model/air_four_classes_rnn/')

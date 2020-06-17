@@ -67,41 +67,32 @@ class AirBinaryTemporalCNN:
   def build_model(self) -> tf.keras.Model:
     # Creates inputs
     inputs = tf.keras.Input((TIME_SIZE, MFCC_SIZE))
-
     # A 1D convolutional layer looking for timeline pattern in the original
     # spectrogram. Filters have 50% overlap in the time axis.
     conv1 = tf.keras.layers.Conv1D(filters=16, kernel_size=16,
                                    strides=8, padding='same',
                                    activation=tf.nn.relu)
-
     # Batch norm layer
     batch_norm1 = tf.keras.layers.BatchNormalization(axis=-1, name='BatchNorm1')
-
     # Dropout layer
     dropout1 = tf.keras.layers.Dropout(0.2)
-
     # Another 1D convolutional layer afterward to generate more complex
     # time features. The kernel combines analyzes three consecutive
     # activation maps from the previous layer output.
     conv2 = tf.keras.layers.Conv1D(filters=16, kernel_size=3,
                                    padding='same',
                                    activation=tf.nn.relu)
-
     # Batch norm layer
     batch_norm2 = tf.keras.layers.BatchNormalization(axis=-1, name='BatchNorm2')
-
     # Dropout layer
     dropout2 = tf.keras.layers.Dropout(0.2)
-
     # Performs global max pooling to "keep only the maximum" activation of
     # the previous convolutional layer filters. Technically answer where
     # (in time) the filter generated the strongest output.
     pooling1 = tf.keras.layers.GlobalMaxPooling1D()
-
     # Dense connecting layers to perform classification
     dense1 = tf.keras.layers.Dense(1, activation=tf.nn.sigmoid,
                                    kernel_regularizer=tf.keras.regularizers.l2(0.2)) if self.regularize else None
-
     # Creates connections between layers of the model
     x = conv1(inputs)
     if self.batch_norm:
@@ -115,12 +106,14 @@ class AirBinaryTemporalCNN:
       x = dropout2(x)
     x = pooling1(x)
     outputs = dense1(x)
-
     return tf.keras.Model(inputs, outputs)
 
   # Prints out the model's summary
   def summary(self) -> None:
     self.model.summary()
+    tf.keras.utils.plot_model(self.model,
+                              to_file='diagrams/air_two_classes_temporal_cnn.jpg',
+                              expand_nested=True, show_shapes=True)
 
   # Trains model
   def fit(self, train_record: str, test_record: str, epochs):
