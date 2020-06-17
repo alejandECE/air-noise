@@ -1,3 +1,6 @@
+#  Created by Luis A. Sanchez-Perez (alejand@umich.edu).
+#  Copyright © Do not distribute or use without authorization from author
+
 import tensorflow as tf
 
 
