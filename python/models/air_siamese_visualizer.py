@@ -7,9 +7,12 @@ from commons import AUTOTUNE
 from commons import AIRCRAFT_EIGHT_LABELS
 from air_siamese_encodings_export import feature_description
 from sklearn.decomposition import IncrementalPCA
+from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
+import numpy as np
 
 # Constants
 BATCH_SIZE = 64
@@ -38,19 +41,68 @@ def create_embeddings_dataset(records_path: str, categories: list) -> tf.data.Da
 
 
 # Finds PCA using incremental approach
-def find_incremental_pca(dataset: tf.data.Dataset) -> IncrementalPCA:
-  pca = IncrementalPCA(n_components=2)
+def find_incremental_pca(dataset: tf.data.Dataset, components: int) -> IncrementalPCA:
+  pca = IncrementalPCA(n_components=components)
   for batch in dataset:
     pca.fit(batch[0].numpy())
   return pca
 
 
-def plot_embeddings(dataset: tf.data.Dataset, categories: list):
+def find_pca(dataset: tf.data.Dataset, components: int) -> PCA:
+  pca = PCA(n_components=components)
+  batches = []
+  for batch in dataset:
+    batches.append(batch[0].numpy())
+  X = np.vstack(batches)
+  pca.fit(X)
+  return pca
+
+
+# Plots embeddings in 3D
+def plot_embeddings_3d(dataset: tf.data.Dataset, categories: list, method='normal'):
   # Finds PCA
-  pca = find_incremental_pca(dataset)
+  if method == 'normal':
+    pca = find_pca(dataset, 3)
+  elif method == 'incremental':
+    pca = find_incremental_pca(dataset, 3)
   # Creates colomap and supporting dictionary
   viridis = cm.get_cmap('viridis', len(categories))
   colors = {category: viridis(index / len(categories)) for index, category in enumerate(categories)}
+  # Creates figure
+  fig = plt.figure()
+  fig.set_size_inches(10, 6)
+  ax = fig.add_subplot(111, projection='3d')
+  # Goes through every batch adding scatter plots
+  for embeddings, labels in dataset:
+    reduced_embeddings = pca.transform(embeddings.numpy())
+    ax.scatter(reduced_embeddings[:, 0],
+               reduced_embeddings[:, 1],
+               reduced_embeddings[:, 2],
+               c=[colors[label] for label in labels.numpy()])
+  # Create titles and labels
+  ax.set_title('PCA Embeddings (Total Var: {:.2f})'.format(pca.explained_variance_ratio_.sum()))
+  ax.set_xlabel('First PC (Var: {:.2f})'.format(pca.explained_variance_ratio_[0]))
+  ax.set_ylabel('Second PC (Var: {:.2f})'.format(pca.explained_variance_ratio_[1]))
+  ax.set_zlabel('Third PC (Var: {:.2f})'.format(pca.explained_variance_ratio_[2]))
+  ax.view_init(40, -60)
+  # Creates legend
+  plt.legend(handles=[
+    mpatches.Patch(color=colors[category], label=category) for category in categories
+  ])
+  plt.show()
+
+
+# Plots embeddings in 2D
+def plot_embeddings_2d(dataset: tf.data.Dataset, categories: list, method='normal'):
+  # Finds PCA
+  if method == 'normal':
+    pca = find_pca(dataset, 3)
+  elif method == 'incremental':
+    pca = find_incremental_pca(dataset, 3)
+  # Creates colomap and supporting dictionary
+  viridis = cm.get_cmap('viridis', len(categories))
+  colors = {category: viridis(index / len(categories)) for index, category in enumerate(categories)}
+  # Creates figure
   fig = plt.figure()
   fig.set_size_inches(10, 6)
   ax = fig.add_subplot()
@@ -60,6 +112,10 @@ def plot_embeddings(dataset: tf.data.Dataset, categories: list):
     ax.scatter(reduced_embeddings[:, 0],
                reduced_embeddings[:, 1],
                c=[colors[label] for label in labels.numpy()])
+  # Create titles and labels
+  ax.set_title('PCA Embeddings (Total Var: {:.2f})'.format(pca.explained_variance_ratio_.sum()))
+  ax.set_xlabel('First PC (Var: {:.2f})'.format(pca.explained_variance_ratio_[0]))
+  ax.set_ylabel('Second PC (Var: {:.2f})'.format(pca.explained_variance_ratio_[1]))
   # Creates legend
   plt.legend(handles=[
     mpatches.Patch(color=colors[category], label=category) for category in categories
@@ -74,5 +130,9 @@ if __name__ == '__main__':
   classes = AIRCRAFT_EIGHT_LABELS
   # Loads embeddings
   embedding_ds = create_embeddings_dataset(embeddings_path, classes)
-  # Plots dataset
-  plot_embeddings(embedding_ds, classes)
+  # Plots dataset 2d
+  plot_embeddings_2d(embedding_ds, classes)
+  plot_embeddings_2d(embedding_ds, classes, method='incremental')
+  # Plots dataset 3d
+  plot_embeddings_3d(embedding_ds, classes)
+  plot_embeddings_3d(embedding_ds, classes, method='incremental')
