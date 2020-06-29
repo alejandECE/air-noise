@@ -199,10 +199,10 @@ class AirSiameseLearner:
   """
   Siamese architecture to learn embeddings that allow to differentiate aircraft classes based on noise during take-off.
   """
-  def __init__(self, regularize=True, batch_norm=False):
+  def __init__(self, use_regularization=True, use_batch_norm=False):
     # Stores options
-    self.regularize = regularize
-    self.batch_norm = batch_norm
+    self.use_regularization = use_regularization
+    self.use_batch_norm = use_batch_norm
     # Builds model architecture
     self.siamese, self.sibling = self.build_model()
     # Selects loss and optimizer
@@ -214,7 +214,7 @@ class AirSiameseLearner:
     # Inputs to the siamese model. Data is fed as a pair (input1, input2)
     input1 = tf.keras.layers.Input((None, MFCC_SIZE, WINDOW_SIZE, 1), name='spec1')
     input2 = tf.keras.layers.Input((None, MFCC_SIZE, WINDOW_SIZE, 1), name='spec2')
-    # Actual model receiving a spectrogram and outputing an embedding
+    # Actual model receiving a spectrogram and outputting an embedding
     sibling = self.build_sibling_model()
     # Embeddings for both inputs
     embedding1 = sibling(input1)
@@ -281,15 +281,15 @@ class AirSiameseLearner:
     # Creates connections between layers of the model
     x = conv1(spectrogram)
     x = pooling1(x)
-    if self.batch_norm:
+    if self.use_batch_norm:
       x = batch_norm1(x)
     x = conv2(x)
     x = conv3(x)
     x = pooling2(x)
     x = flatten1(x)
-    if self.regularize:
+    if self.use_regularization:
       x = dropout1(x)
-    if self.batch_norm:
+    if self.use_batch_norm:
       x = batch_norm2(x)
     embedding = lstm1(x)
     return tf.keras.Model(spectrogram, embedding, name='sibling_nn')
@@ -306,7 +306,7 @@ class AirSiameseLearner:
     with tf.GradientTape() as tape:
       # Computes siamese architecture output
       y_pred = self.siamese([input1, input2])
-      # Computes loss in batch (the <start> token should not be part of the expected output)
+      # Computes loss in batch
       loss = self.loss(y_true, tf.squeeze(y_pred))
     # Determines gradients
     variables = self.siamese.trainable_variables
@@ -344,20 +344,16 @@ class AirSiameseLearner:
 if __name__ == '__main__':
   # Selects CPU or GPU
   # os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-
   # Training/Test data files
   train_file = '../exports/2020-03-01 07-34-19/train.tfrecord'
   test_file = '../exports/2020-03-01 07-34-19/test.tfrecord'
-
   # Performs training using only the first four classes
-  learner = AirSiameseLearner(regularize=True, batch_norm=False)
+  learner = AirSiameseLearner(use_regularization=True, use_batch_norm=False)
   learner.fit(train_file, AIRCRAFT_EIGHT_LABELS, 600)
   learner.summary()
-
   # Saves trained sibling model
   date_string = datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S')
   save_path = 'trained_model/air_siamense_sibling ' + date_string + '/'
   tf.keras.models.save_model(learner.sibling, save_path)
-
   # Evaluate trained model
   evaluations = evaluate(save_path, test_file, AIRCRAFT_EIGHT_LABELS)

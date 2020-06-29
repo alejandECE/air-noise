@@ -47,17 +47,13 @@ def export_embeddings_from_dataset(dataset: tf.data.Dataset, destination: str):
 if __name__ == '__main__':
   # Selects CPU or GPU
   os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-
   # Training/Test data files
   train_file = '../exports/2020-03-01 07-34-19/train.tfrecord'
   test_file = '../exports/2020-03-01 07-34-19/test.tfrecord'
-
   # Model to generate the embedding with
   load_path = 'trained_model/air_siamense_sibling 2020-06-28 23-33-06'
-
   # Creates tf.data.Dataset with labeled embeddings observations
   ds = create_export_dataset([train_file, test_file], load_path)
-
   # Export observations to tfrecords
   save_path = 'embeddings/' + load_path.split(sep='/')[-1] + '.tfrecord'
   export_embeddings_from_dataset(ds, save_path)
