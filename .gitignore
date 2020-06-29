@@ -11,3 +11,6 @@ __pycache__
 *.data*
 *.index
 *.pb
+*.tsv
+*.pbtxt
+checkpoint

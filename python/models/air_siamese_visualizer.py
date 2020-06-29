@@ -3,6 +3,8 @@
 
 from typing import Tuple
 import tensorflow as tf
+from tensorboard.plugins import projector
+
 from commons import AUTOTUNE
 from commons import AIRCRAFT_EIGHT_LABELS
 from air_siamese_encodings_export import feature_description
@@ -13,6 +15,7 @@ import matplotlib.patches as mpatches
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 import numpy as np
+import os
 
 # Constants
 BATCH_SIZE = 64
@@ -123,6 +126,37 @@ def plot_embeddings_2d(dataset: tf.data.Dataset, categories: list, method='norma
   plt.show()
 
 
+# Creates a directory to log info for Tensorboard
+def create_logdir():
+  log_dir = "./logs/fit/air_siamese/"
+  return log_dir
+
+
+# Exports embeddings to Tensorboard
+def export_to_tensorboard(dataset: tf.data.Dataset):
+  # Set up a logs directory, so Tensorboard knows where to look for files
+  log_dir = create_logdir()
+  if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+    print(log_dir)
+  # Creates embedding checkpoint with data
+  with open(os.path.join(log_dir, 'metadata.tsv'), "w") as f:
+    embeddings = []
+    for batch_embeddings, batch_labels in dataset:
+      embeddings.append(batch_embeddings)
+      for label in batch_labels:
+        f.write("{}\n".format(label))
+    checkpoint = tf.train.Checkpoint(embedding=tf.Variable(tf.concat(embeddings, axis=0)))
+    checkpoint.save(os.path.join(log_dir, "embedding.ckpt"))
+  # Set up config
+  config = projector.ProjectorConfig()
+  embedding = config.embeddings.add()
+  # The name of the tensor will be suffixed by `/.ATTRIBUTES/VARIABLE_VALUE`
+  embedding.tensor_name = "embedding/.ATTRIBUTES/VARIABLE_VALUE"
+  embedding.metadata_path = 'metadata.tsv'
+  projector.visualize_embeddings(log_dir, config)
+
+
 if __name__ == '__main__':
   # Embeddings file
   embeddings_path = 'embeddings/air_siamense_sibling 2020-06-28 23-33-06.tfrecord'
@@ -136,3 +170,5 @@ if __name__ == '__main__':
   # Plots dataset 3d
   plot_embeddings_3d(embedding_ds, classes)
   plot_embeddings_3d(embedding_ds, classes, method='incremental')
+  # Exports to Tensorboard
+  export_to_tensorboard(embedding_ds)
