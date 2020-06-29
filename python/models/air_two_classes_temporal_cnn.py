@@ -5,9 +5,10 @@ from typing import Tuple
 import tensorflow as tf
 from tfrecord_dataset import feature_description
 from utils import display_performance
+from commons import AUTOTUNE
+from commons import AIRCRAFT_TWO_LABELS
 
 # Constants
-AUTOTUNE = tf.data.experimental.AUTOTUNE
 TIME_SIZE = 401
 MFCC_SIZE = 128
 BATCH_SIZE = 128
@@ -21,7 +22,7 @@ def parse_observation(example: tf.Tensor) -> Tuple:
   mfcc = observation['mfcc']
   samples = observation['samples']
   spec = tf.transpose(tf.reshape(observation['spec'], (mfcc, samples)))
-  label = observation['label'] == b'Airbus'
+  label = observation['label'] == AIRCRAFT_TWO_LABELS[0]
 
   return spec, label
 

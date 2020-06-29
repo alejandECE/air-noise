@@ -6,20 +6,16 @@ import tensorflow as tf
 from tfrecord_dataset import feature_description
 from spec_sequencer import SpecSequencer
 from utils import display_performance
+from commons import AUTOTUNE
+from commons import AIRCRAFT_EIGHT_LABELS
 
 # Constants
-AIRCRAFT_LABELS = [
-  b'A320-2xx (CFM56-5)', b'B737-7xx (CF56-7B22-)', b'ERJ190 (CF34-10E)', b'B737-8xx (CF56-7B22+)',
-  b'ERJ145 (AE3007)', b'A320-2xx (V25xx)', b'A319-1xx (V25xx)', b'ERJ170-175 (CF34-8E)'
-]
-AUTOTUNE = tf.data.experimental.AUTOTUNE
 TIME_SIZE = 401
 MFCC_SIZE = 128
 BATCH_SIZE = 64
 BUFFER_SIZE = 1000
 WINDOW_SIZE = 50
 WINDOW_OVERLAP = 0.5
-
 
 # Creates a sequence of windows from a spectrogram
 @tf.function
@@ -44,7 +40,7 @@ def parse_observation(example: tf.Tensor) -> Tuple:
   spec = tf.reshape(observation['spec'], (mfcc, samples))
   spec = tf.expand_dims(spec, axis=-1)  # channel
   label = tf.argmax(tf.cast(
-    tf.equal(observation['label'], tf.constant(AIRCRAFT_LABELS)), dtype=tf.uint8
+    tf.equal(observation['label'], tf.constant(AIRCRAFT_EIGHT_LABELS)), dtype=tf.uint8
   ))
 
   return spec, label

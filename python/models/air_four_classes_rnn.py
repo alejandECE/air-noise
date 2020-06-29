@@ -6,10 +6,10 @@ import tensorflow as tf
 from tfrecord_dataset import feature_description
 from spec_sequencer import SpecSequencer
 from utils import display_performance
+from commons import AIRCRAFT_FOUR_LABELS
+from commons import AUTOTUNE
 
 # Constants
-AIRCRAFT_LABELS = [b'A320-2xx (CFM56-5)', b'B737-7xx (CF56-7B22-)', b'ERJ190 (CF34-10E)', b'B737-8xx (CF56-7B22+)']
-AUTOTUNE = tf.data.experimental.AUTOTUNE
 TIME_SIZE = 401
 MFCC_SIZE = 128
 BATCH_SIZE = 64
@@ -41,7 +41,7 @@ def parse_observation(example: tf.Tensor) -> Tuple:
   spec = tf.reshape(observation['spec'], (mfcc, samples))
   spec = tf.expand_dims(spec, axis=-1)  # channel
   label = tf.argmax(tf.cast(
-    tf.equal(observation['label'], tf.constant(AIRCRAFT_LABELS)), dtype=tf.uint8
+    tf.equal(observation['label'], tf.constant(AIRCRAFT_FOUR_LABELS)), dtype=tf.uint8
   ))
 
   return spec, label

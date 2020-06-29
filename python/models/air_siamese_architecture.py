@@ -1,6 +1,8 @@
 #  Created by Luis A. Sanchez-Perez (alejand@umich.edu).
 #  Copyright © Do not distribute or use without authorization from author
 
+from commons import AIRCRAFT_EIGHT_LABELS
+from commons import AUTOTUNE
 from typing import Tuple
 from tfrecord_dataset import feature_description
 import tensorflow as tf
@@ -9,11 +11,6 @@ import time
 import datetime
 import os
 
-AIRCRAFT_LABELS = [
-  b'A320-2xx (CFM56-5)', b'B737-7xx (CF56-7B22-)', b'ERJ190 (CF34-10E)', b'B737-8xx (CF56-7B22+)',
-  b'ERJ145 (AE3007)', b'A320-2xx (V25xx)', b'A319-1xx (V25xx)', b'ERJ170-175 (CF34-8E)'
-]
-AUTOTUNE = tf.data.experimental.AUTOTUNE
 TIME_SIZE = 401
 MFCC_SIZE = 128
 POSITIVE_SAMPLES = 32
@@ -21,7 +18,6 @@ NEGATIVE_SAMPLES = 32
 BUFFER_SIZE = 1000
 WINDOW_SIZE = 50
 WINDOW_OVERLAP = 0.5
-model_path = None
 
 
 # Computes the absolute difference of two embeddings
@@ -69,11 +65,11 @@ def parse_observation(example: tf.Tensor) -> Tuple:
 
 # Gets embedding by applying trained model
 @tf.function
-def get_embedding(batch: tf.Tensor, labels: tf.Tensor) -> Tuple:
+def get_embedding(model_path: str, batch_inputs: tf.Tensor, batch_labels: tf.Tensor, ) -> Tuple:
   # Load trained sibling model
   sibling = tf.keras.models.load_model(model_path)
   # Evaluates model to get embedding
-  return sibling(batch), labels
+  return sibling(batch_inputs), batch_labels
 
 
 # Creates dataset of pairs for training only using observations from the categories listed
@@ -132,8 +128,13 @@ def create_training_dataset(records_path: str, categories: list) -> tf.data.Data
   return train_ds
 
 
-# Creates dataset for n-way one shot learning for testing only using the categories listed
-def create_test_dataset(records_path: str, categories: list, n_way: int):
+# Compute the squared distance between two embeddings
+def compute_squared_distance(target_embedding: tf.Tensor, embeddings_batch: tf.Tensor):
+  return ((target_embedding.numpy() - embeddings_batch.numpy())**2).sum(axis=1)
+
+
+# Creates dataset for n-way one shot learning for testing using the categories listed only
+def create_test_dataset(model_path: str, records_path: str, categories: list, n_way: int):
   # Reads tfrecords from file
   records_ds = tf.data.TFRecordDataset([records_path])
   # Parses observation from tfrecords
@@ -141,7 +142,8 @@ def create_test_dataset(records_path: str, categories: list, n_way: int):
   # Builds a sequence to feed siamese networks
   records_ds = records_ds.map(build_sequence, num_parallel_calls=AUTOTUNE).batch(POSITIVE_SAMPLES + NEGATIVE_SAMPLES)
   # Get the embedding dataset using the model trained
-  embedding_ds = records_ds.map(get_embedding, num_parallel_calls=AUTOTUNE).unbatch().cache()
+  embedding_ds = records_ds.map(lambda inputs, labels: get_embedding(model_path, inputs, labels),
+                                num_parallel_calls=AUTOTUNE).unbatch().cache()
   # Creates a dictionary of datasets with (keys, values): label, (positive samples, negative samples)
   datasets = {}
   for category in categories:
@@ -156,15 +158,10 @@ def create_test_dataset(records_path: str, categories: list, n_way: int):
   return datasets
 
 
-# Compute the squared distance between two embeddings
-def compute_squared_distance(target_embedding: tf.Tensor, embeddings_batch: tf.Tensor):
-  return ((target_embedding.numpy() - embeddings_batch.numpy())**2).sum(axis=1)
-
-
-# Use n-way one shot learning
-def evaluate(records_path: str, categories: list, evals: int = 100, n_way=4) -> list:
+# Use n-way one shot learning evaluation
+def evaluate(model_path: str, records_path: str, categories: list, evals: int = 100, n_way=4) -> list:
   # Creates dataset to sample from
-  datasets = create_test_dataset(records_path, categories, n_way)
+  datasets = create_test_dataset(model_path, records_path, categories, n_way)
   # Performs n-way one shot learning
   evaluations = []
   # Selects random classes to evaluate
@@ -192,7 +189,7 @@ def evaluate(records_path: str, categories: list, evals: int = 100, n_way=4) -> 
     evaluations.append(entry)
     end = time.perf_counter()
     print('Entry ({:.2f} secs):'.format(end - start), entry)
-  # Computing accuracy
+  # Computing matching estimations
   matching = [label == distances[0][1] for label, distances in evaluations]
   print('Closest matching target: {}'.format(sum(matching)))
   return evaluations
@@ -354,13 +351,13 @@ if __name__ == '__main__':
 
   # Performs training using only the first four classes
   learner = AirSiameseLearner(regularize=True, batch_norm=False)
-  learner.fit(train_file, AIRCRAFT_LABELS[:4], 1)
-  # learner.summary()
+  learner.fit(train_file, AIRCRAFT_EIGHT_LABELS, 600)
+  learner.summary()
 
   # Saves trained sibling model
   date_string = datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S')
-  model_path = 'trained_model/air_siamense_sibling ' + date_string + '/'
-  tf.keras.models.save_model(learner.sibling, model_path)
+  save_path = 'trained_model/air_siamense_sibling ' + date_string + '/'
+  tf.keras.models.save_model(learner.sibling, save_path)
 
   # Evaluate trained model
-  evaluations = evaluate(test_file, AIRCRAFT_LABELS[:4])
+  evaluations = evaluate(save_path, test_file, AIRCRAFT_EIGHT_LABELS)

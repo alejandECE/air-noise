@@ -6,9 +6,10 @@ import tensorflow as tf
 from tfrecord_dataset import feature_description
 from spec_sequencer import SpecSequencer
 from utils import display_performance
+from commons import AUTOTUNE
+from commons import AIRCRAFT_TWO_LABELS
 
 # Constants
-AUTOTUNE = tf.data.experimental.AUTOTUNE
 TIME_SIZE = 401
 MFCC_SIZE = 128
 WINDOW_SIZE = 50
@@ -39,7 +40,7 @@ def parse_observation(example: tf.Tensor) -> Tuple:
   samples = observation['samples']
   spec = tf.reshape(observation['spec'], (mfcc, samples))
   spec = tf.expand_dims(spec, axis=-1)  # channel
-  label = observation['label'] == b'Airbus'
+  label = observation['label'] == AIRCRAFT_TWO_LABELS[0]
 
   return spec, label
 

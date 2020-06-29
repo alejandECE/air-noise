@@ -9,7 +9,7 @@ import tensorflow as tf
 feature_description = {
   'spec': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True, default_value=[0.0]),
   'mfcc': tf.io.FixedLenFeature([], tf.int64),
-  'samples': tf.io.FixedLenFeature([],tf.int64),
+  'samples': tf.io.FixedLenFeature([], tf.int64),
   'label': tf.io.FixedLenFeature([], tf.string, default_value=''),
   'measurement': tf.io.FixedLenFeature([], tf.string, default_value=''),
   'array': tf.io.FixedLenFeature([], tf.string, default_value=''),
