@@ -1,18 +1,25 @@
 #  Created by Luis A. Sanchez-Perez (alejand@umich.edu).
 #  Copyright © Do not distribute or use without authorization from author
 
+import argparse
 import datetime
-import os
+import pathlib
 from typing import Tuple
 import tensorflow as tf
-from tfrecord_dataset import feature_description
 from spectrogram_sequencer import SpectrogamSequencer
-from utils import display_performance
 from commons import AUTOTUNE
+from commons import EXPERIMENTS_FOLDER
+from commons import LOCAL_DIAGRAM_FOLDER
+from commons import LOCAL_TRAINED_MODEL_FOLDER
 from commons import verify_tfrecords_from_directory
 from commons import get_classes_from_directory
+from utils import display_performance
+import sys
+sys.path.append('../extraction')
+from tfrecord_dataset import feature_description
 
 # Constants
+MODELS_NAME = 'air_binary_rnn'
 TIME_SIZE = 401
 MFCC_SIZE = 128
 WINDOW_SIZE = 50
@@ -36,11 +43,11 @@ def parse_observation(example: tf.Tensor, categories: list) -> Tuple:
 # Creates dataset from tfrecord files
 def create_dataset(dataset_folder: str, categories: list) -> Tuple:
   # Creates training data pipeline
-  train_ds = tf.data.TFRecordDataset([dataset_folder + 'train.tfrecord'])
+  train_ds = tf.data.TFRecordDataset([str(pathlib.Path(dataset_folder) / 'train.tfrecord')])
   train_ds = train_ds.map(lambda example: parse_observation(example, categories), num_parallel_calls=AUTOTUNE).cache()
   train_ds = train_ds.shuffle(BUFFER_SIZE).batch(BATCH_SIZE).prefetch(1)
   # Creates test data pipeline
-  test_ds = tf.data.TFRecordDataset([dataset_folder + 'test.tfrecord'])
+  test_ds = tf.data.TFRecordDataset([str(pathlib.Path(dataset_folder) / 'test.tfrecord')])
   test_ds = test_ds.map(lambda example: parse_observation(example, categories), num_parallel_calls=AUTOTUNE).cache()
   test_ds = test_ds.batch(BATCH_SIZE).prefetch(1)
   return train_ds, test_ds
@@ -56,16 +63,11 @@ class AirBinaryRNN:
   """
 
   def __init__(self, dataset_folder: str, use_regularizer=True, use_batch_norm=False):
-    # Verify train.tfrecord and test.tfrecord exist in dataset folder
-    assert verify_tfrecords_from_directory(dataset_folder), 'There is no train.tfrecord or test.tfrecord' \
-                                                            'in the folder specified '
-    self.dataset_folder = dataset_folder
-    self.experiments_folder = dataset_folder + 'experiments/' + datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S/')
-    # Creates experiments folder if does not exist
-    if not os.path.exists(self.experiments_folder):
-      os.makedirs(self.experiments_folder)
+    # Setups experiment folder
+    self.dataset_folder = pathlib.Path(dataset_folder)
+    self.experiment_path, self.model_path, self.diagram_path = self.setup_experiment_folder()
     # Determine classes from folder
-    categories = get_classes_from_directory(self.dataset_folder)
+    categories = get_classes_from_directory(dataset_folder)
     # Verify binary
     assert len(categories) == 2, 'Wrong number of classes. Expecting two.'
     self.categories = categories
@@ -80,6 +82,27 @@ class AirBinaryRNN:
       loss=tf.keras.losses.BinaryCrossentropy(),
       metrics=['accuracy']
     )
+
+  # Setup experiment folder
+  def setup_experiment_folder(self) -> Tuple:
+    # Verify train.tfrecord and test.tfrecord exist in dataset folder
+    assert verify_tfrecords_from_directory(self.dataset_folder), 'There is no train.tfrecord or test.tfrecord' \
+                                                                 'in the folder specified '
+    # Experiment path (root folder of the experiment)
+    experiment_path = self.dataset_folder / EXPERIMENTS_FOLDER / datetime.datetime.now().strftime('%Y-%m-%d'
+                                                                                                  '-%H-%M-%S')
+    if not experiment_path.exists():
+      experiment_path.mkdir(parents=False)
+    # Model path (where it is saved during training)
+    model_path = experiment_path / LOCAL_TRAINED_MODEL_FOLDER / MODELS_NAME
+    if not model_path.exists():
+      model_path.mkdir(parents=True)
+    # Keras model diagram
+    diagram_path = experiment_path / LOCAL_DIAGRAM_FOLDER / (MODELS_NAME + '.jpg')
+    if not diagram_path.parent.exists():
+      diagram_path.parent.mkdir(parents=False)
+    # Returns all relevant paths as tuple
+    return experiment_path, model_path, diagram_path
 
   # Builds models architecture returning a tf.keras.Model
   def build_model(self) -> tf.keras.Model:
@@ -160,24 +183,19 @@ class AirBinaryRNN:
     return tf.keras.Model(inputs, outputs)
 
   # Prints out the model's summary
-  def summary(self) -> None:
+  def summary(self):
     self.model.summary()
-    save_path = self.experiments_folder + 'diagrams/'
-    if not os.path.exists(save_path):
-      os.makedirs(save_path)
     tf.keras.utils.plot_model(self.model,
-                              to_file=save_path + 'air_two_classes_rnn.jpg',
-                              expand_nested=True, show_shapes=True)
+                              to_file=str(self.diagram_path),
+                              expand_nested=True, show_shapes=True, show_layer_names=False)
 
   # Trains model
   def train(self, epochs: int):
     # Creates train/test datasets using tf.data.Dataset
     train_ds, test_ds = create_dataset(self.dataset_folder, self.categories)
     # Callback (used in tf.keras.Model.fit) to save the model with the best validation accuracy
-    save_path = self.experiments_folder + 'trained_model/air_two_classes_rnn/'
-    # Callback (used in tf.keras.Model.fit) to save the model with the best validation accuracy
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
-      filepath=save_path,
+      filepath=str(self.model_path),
       save_best_only=True,
       save_weights_only=False,
       monitor='val_loss',
@@ -195,13 +213,23 @@ class AirBinaryRNN:
 
 
 if __name__ == '__main__':
+  # Parsing arguments
+  parser = argparse.ArgumentParser()
+  parser.add_argument('folder', help='Dataset folder with tfrecords', type=str)
+  parser.add_argument('--epochs', help='Epochs to train (Default: 100)', type=int)
+  parser.add_argument('--use_regularizer', help='Use regularization', action="store_true")
+  parser.add_argument('--use_batch_norm', help='Use batch normalization', action="store_true")
+  args = parser.parse_args()
+  epochs = args.epochs if args.epochs else 100
+  use_regularizer = True if args.use_regularizer else False
+  use_batch_norm = True if args.use_batch_norm else False
   # Dataset folder
-  folder = '../exports/2020-02-03 11-55-25 (two classes)/'
+  folder = args.folder
   # Creates model and trains
-  learner = AirBinaryRNN(folder, use_batch_norm=True)
+  learner = AirBinaryRNN(folder, use_regularizer=use_regularizer, use_batch_norm=use_batch_norm)
   learner.summary()
-  learner.train(1)
+  learner.train(epochs)
   # Loads and evaluates model
-  saved_model = tf.keras.models.load_model(learner.experiments_folder + 'trained_model/air_two_classes_rnn/')
+  saved_model = tf.keras.models.load_model(str(learner.model_path))
   training_ds, testing_ds = create_dataset(learner.dataset_folder, learner.categories)
   display_performance(saved_model, training_ds, testing_ds)
