@@ -2,16 +2,14 @@
 #  Copyright © Do not distribute or use without authorization from author
 
 import tensorflow as tf
+import pathlib
 import os
 
-# Most frequent eight classes used from dataset
-AIRCRAFT_EIGHT_LABELS = [
-  b'A320-2xx (CFM56-5)', b'B737-7xx (CF56-7B22-)', b'ERJ190 (CF34-10E)', b'B737-8xx (CF56-7B22+)',
-  b'ERJ145 (AE3007)', b'A320-2xx (V25xx)', b'A319-1xx (V25xx)', b'ERJ170-175 (CF34-8E)'
-]
-
-# Autotune constant from tf
+# Constants
 AUTOTUNE = tf.data.experimental.AUTOTUNE
+EXPERIMENTS_FOLDER = 'experiments'
+LOCAL_DIAGRAM_FOLDER = 'diagrams'
+LOCAL_TRAINED_MODEL_FOLDER = 'trained_model'
 
 
 # Get classes/categories/labels from directory
@@ -21,7 +19,7 @@ def get_classes_from_directory(directory: str) -> list:
     for file in files:
       # A folder is considered a category if contains any npy file
       if '.npy' in file:
-        classes.append(root.split('/')[-1].encode('utf8'))
+        classes.append(root.split('\\')[-1].encode('utf8'))
         break
   return classes
 
@@ -30,7 +28,7 @@ def get_classes_from_directory(directory: str) -> list:
 def verify_tfrecords_from_directory(directory: str, records_names: list = None) -> list:
   if records_names is None:
     records_names = ['train.tfrecord', 'test.tfrecord']
-  return all([os.path.exists(os.path.join(directory, name)) for name in records_names])
+  return all([(pathlib.Path(directory) / name).exists() for name in records_names])
 
 
 if __name__ == '__main__':

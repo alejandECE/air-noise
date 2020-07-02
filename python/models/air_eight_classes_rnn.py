@@ -4,7 +4,7 @@
 from typing import Tuple
 import tensorflow as tf
 from tfrecord_dataset import feature_description
-from spec_sequencer import SpecSequencer
+from spectrogram_sequencer import SpectrogamSequencer
 from utils import display_performance
 from commons import AUTOTUNE
 from commons import AIRCRAFT_EIGHT_LABELS
@@ -16,6 +16,7 @@ BATCH_SIZE = 64
 BUFFER_SIZE = 1000
 WINDOW_SIZE = 50
 WINDOW_OVERLAP = 0.5
+
 
 # Creates a sequence of windows from a spectrogram
 @tf.function
@@ -98,7 +99,7 @@ class AirMulticlassRNN:
       inputs = tf.keras.layers.Input((None, MFCC_SIZE, WINDOW_SIZE, 1))
 
     # Creates the sequencer layer (only used if requested)
-    sequencer1 = SpecSequencer(WINDOW_SIZE, WINDOW_OVERLAP)
+    sequencer1 = SpectrogamSequencer(WINDOW_SIZE, WINDOW_OVERLAP)
 
     # First convolutional layer to find spatial features in a segment of the spectrogram. Timed distributed to get
     # applied to every segment of the inputted spectrogram.
