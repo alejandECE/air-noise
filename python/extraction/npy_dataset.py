@@ -1,4 +1,6 @@
-#  Created by Luis Alejandro (alejand@umich.edu)
+#  Created by Luis A. Sanchez-Perez (alejand@umich.edu).
+#  Copyright © Do not distribute or use without authorization from author
+
 import nptdms
 import numpy as np
 import os
