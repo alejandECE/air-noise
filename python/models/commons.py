@@ -4,17 +4,11 @@
 import tensorflow as tf
 import os
 
-# Path to saved model
-model_path = None
-
 # Most frequent eight classes used from dataset
 AIRCRAFT_EIGHT_LABELS = [
   b'A320-2xx (CFM56-5)', b'B737-7xx (CF56-7B22-)', b'ERJ190 (CF34-10E)', b'B737-8xx (CF56-7B22+)',
   b'ERJ145 (AE3007)', b'A320-2xx (V25xx)', b'A319-1xx (V25xx)', b'ERJ170-175 (CF34-8E)'
 ]
-
-# Most frequent four classes used from dataset
-AIRCRAFT_FOUR_LABELS = [b'A320-2xx (CFM56-5)', b'B737-7xx (CF56-7B22-)', b'ERJ190 (CF34-10E)', b'B737-8xx (CF56-7B22+)']
 
 # Autotune constant from tf
 AUTOTUNE = tf.data.experimental.AUTOTUNE

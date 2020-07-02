@@ -1,13 +1,14 @@
 #  Created by Luis A. Sanchez-Perez (alejand@umich.edu).
 #  Copyright © Do not distribute or use without authorization from author
 
+import datetime
+import os
 from typing import Tuple
 import tensorflow as tf
 from tfrecord_dataset import feature_description
-from spec_sequencer import SpecSequencer
+from spectrogram_sequencer import SpectrogamSequencer
 from utils import display_performance
-from commons import AIRCRAFT_FOUR_LABELS
-from commons import AUTOTUNE
+from commons import AUTOTUNE, verify_tfrecords_from_directory, get_classes_from_directory
 
 # Constants
 TIME_SIZE = 401
@@ -18,51 +19,30 @@ WINDOW_SIZE = 50
 WINDOW_OVERLAP = 0.5
 
 
-# Creates a sequence of windows from a spectrogram
-@tf.function
-def build_sequence(spec, label):
-  samples = tf.shape(spec)[1]
-  start = tf.range(0, samples - WINDOW_SIZE, int(WINDOW_SIZE * WINDOW_OVERLAP))
-  end = tf.range(WINDOW_SIZE, samples, int(WINDOW_SIZE * WINDOW_OVERLAP))
-  sequence = tf.map_fn(lambda index: spec[:, index[0]:index[1]],
-                       tf.stack([start, end], axis=1),
-                       back_prop=False,
-                       dtype=tf.float32)
-
-  return sequence, label
-
-
 # Parses observation from proto format and converts into correct format for training (input,output) = (spec,label)
 @tf.function
-def parse_observation(example: tf.Tensor) -> Tuple:
+def parse_observation(example: tf.Tensor, categories: list) -> Tuple:
   observation = tf.io.parse_single_example(example, feature_description)
   mfcc = observation['mfcc']
   samples = observation['samples']
   spec = tf.reshape(observation['spec'], (mfcc, samples))
   spec = tf.expand_dims(spec, axis=-1)  # channel
   label = tf.argmax(tf.cast(
-    tf.equal(observation['label'], tf.constant(AIRCRAFT_FOUR_LABELS)), dtype=tf.uint8
+    tf.equal(observation['label'], tf.constant(categories)), dtype=tf.uint8
   ))
-
   return spec, label
 
 
 # Creates dataset from tfrecord files
-def create_dataset(train_record: str, test_record: str, sequencer=False) -> Tuple:
+def create_dataset(dataset_folder: str, categories: list) -> Tuple:
   # Creates training data pipeline
-  train_ds = tf.data.TFRecordDataset([train_record])
-  train_ds = train_ds.map(parse_observation, num_parallel_calls=AUTOTUNE).cache()
-  if not sequencer:
-    train_ds = train_ds.map(build_sequence, num_parallel_calls=AUTOTUNE).cache()
+  train_ds = tf.data.TFRecordDataset([dataset_folder + 'train.tfrecord'])
+  train_ds = train_ds.map(lambda example: parse_observation(example, categories), num_parallel_calls=AUTOTUNE).cache()
   train_ds = train_ds.shuffle(BUFFER_SIZE).batch(BATCH_SIZE).prefetch(1)
-
   # Creates test data pipeline
-  test_ds = tf.data.TFRecordDataset([test_record])
-  test_ds = test_ds.map(parse_observation, num_parallel_calls=AUTOTUNE).cache()
-  if not sequencer:
-    test_ds = test_ds.map(build_sequence, num_parallel_calls=AUTOTUNE).cache()
+  test_ds = tf.data.TFRecordDataset([dataset_folder + 'test.tfrecord'])
+  test_ds = test_ds.map(lambda example: parse_observation(example, categories), num_parallel_calls=AUTOTUNE).cache()
   test_ds = test_ds.batch(BATCH_SIZE).prefetch(1)
-
   return train_ds, test_ds
 
 
@@ -75,12 +55,23 @@ class AirMulticlassRNN:
   containing four classes of aircraft take-off signals.
   """
 
-  def __init__(self, categories: int, regularize=True, batch_norm=False, sequencer=False):
-    # Stores options
+  def __init__(self, dataset_folder: str, use_regularizer=True, use_batch_norm=False):
+    # Verify train.tfrecord and test.tfrecord exist in dataset folder
+    assert verify_tfrecords_from_directory(dataset_folder), 'There is no train.tfrecord or test.tfrecord' \
+                                                            'in the folder specified '
+    self.dataset_folder = dataset_folder
+    self.experiments_folder = dataset_folder + 'experiments/' + datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S/')
+    # Creates experiments folder if does not exist
+    if not os.path.exists(self.experiments_folder):
+      os.makedirs(self.experiments_folder)
+    # Determine classes from folder
+    categories = get_classes_from_directory(self.dataset_folder)
+    # Verify binary
+    assert len(categories) > 2, 'Wrong number of classes. Expecting more than two.'
     self.categories = categories
-    self.regularize = regularize
-    self.batch_norm = batch_norm
-    self.sequencer = sequencer
+    # Stores options
+    self.use_regularizer = use_regularizer
+    self.use_batch_norm = use_batch_norm
     # Builds model architecture
     self.model = self.build_model()
     # Selects loss and metric
@@ -93,41 +84,51 @@ class AirMulticlassRNN:
   # Builds models architecture returning a tf.keras.Model
   def build_model(self) -> tf.keras.Model:
     # Create inputs
-    if self.sequencer:
-      inputs = tf.keras.layers.Input((MFCC_SIZE, TIME_SIZE, 1))
-    else:
-      inputs = tf.keras.layers.Input((None, MFCC_SIZE, WINDOW_SIZE, 1))
+    inputs = tf.keras.layers.Input((MFCC_SIZE, TIME_SIZE, 1))
     # Creates the sequencer layer (only used if requested)
-    sequencer1 = SpecSequencer(WINDOW_SIZE, WINDOW_OVERLAP)
+    sequencer = SpectrogamSequencer(WINDOW_SIZE, WINDOW_OVERLAP)
     # First convolutional layer to find spatial features in a segment of the spectrogram. Timed distributed to get
     # applied to every segment of the inputted spectrogram.
     conv1 = tf.keras.layers.TimeDistributed(
-      tf.keras.layers.Conv2D(32, 5, padding='valid', activation=tf.nn.relu, data_format='channels_last'),
+      tf.keras.layers.Conv2D(32, 5,
+                             padding='valid',
+                             data_format='channels_last',
+                             use_bias=False if self.use_batch_norm else True),
       name='Conv1'
     )
+    # Batch norm layer (only used if requested)
+    batch_norm1 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm1')
+    # Activation for first convolutional layer
+    activation1 = tf.keras.layers.Activation(tf.nn.relu)
     # Pooling
     pooling1 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.MaxPool2D(3),
       name='Pool1'
     )
-    # Batch norm layer (only used if requested)
-    batch_norm1 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm1')
     # Second convolutional layer. Timed distributed to get applied to every segment of the inputted spectrogram.
     conv2 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.Conv2D(32, 5,
                              padding='valid',
-                             activation=tf.nn.relu,
-                             data_format='channels_last'),
+                             data_format='channels_last',
+                             use_bias=False if self.use_batch_norm else True),
       name='Conv2'
     )
+    # Batch norm layer (only used if requested)
+    batch_norm2 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm2')
+    # Activation for first convolutional layer
+    activation2 = tf.keras.layers.Activation(tf.nn.relu)
     # Third convolutional layer. Timed distributed.
     conv3 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.Conv2D(32, 5,
                              padding='valid',
-                             activation=tf.nn.relu,
-                             data_format='channels_last'),
+                             data_format='channels_last',
+                             use_bias=False if self.use_batch_norm else True),
       name='Conv3'
     )
+    # Batch norm layer (only used if requested)
+    batch_norm3 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm3')
+    # Activation for first convolutional layer
+    activation3 = tf.keras.layers.Activation(tf.nn.relu)
     # Pooling
     pooling2 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.MaxPool2D(3),
@@ -138,8 +139,6 @@ class AirMulticlassRNN:
       tf.keras.layers.Flatten(),
       name='Flatten'
     )
-    # Batch norm layer (only used if requested)
-    batch_norm2 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm2')
     # Dropout layer
     dropout1 = tf.keras.layers.Dropout(0.3)
     # Recurrent layer to capture temporal relationships
@@ -147,28 +146,27 @@ class AirMulticlassRNN:
     # Dropout layer
     dropout2 = tf.keras.layers.Dropout(0.2)
     # Dense to make the final classification
-    dense1 = tf.keras.layers.Dense(self.categories, activation=tf.nn.softmax,
-                                   kernel_regularizer=tf.keras.regularizers.l2(0.01) if self.regularize else None,
+    dense1 = tf.keras.layers.Dense(len(self.categories), activation=tf.nn.softmax,
+                                   kernel_regularizer=tf.keras.regularizers.l2(0.01) if self.use_regularizer else None,
                                    name='Dense')
     # Creates connections between layers of the model
-    if self.sequencer:
-      x = sequencer1(inputs)
-      x = conv1(x)
-    else:
-      x = conv1(inputs)
-    x = pooling1(x)
-    if self.batch_norm:
+    x = sequencer(inputs)
+    x = conv1(x)
+    if self.use_batch_norm:
       x = batch_norm1(x)
+    x = pooling1(x)
     x = conv2(x)
+    if self.use_batch_norm:
+      x = batch_norm2(x)
     x = conv3(x)
+    if self.use_batch_norm:
+      x = batch_norm3(x)
     x = pooling2(x)
     x = flatten1(x)
-    if self.regularize:
+    if self.use_regularizer:
       x = dropout1(x)
-    if self.batch_norm:
-      x = batch_norm2(x)
     x = lstm1(x)
-    if self.regularize:
+    if self.use_regularizer:
       x = dropout2(x)
     outputs = dense1(x)
     return tf.keras.Model(inputs, outputs)
@@ -176,24 +174,27 @@ class AirMulticlassRNN:
   # Prints out the model's summary
   def summary(self):
     self.model.summary()
+    save_path = self.experiments_folder + 'diagrams/'
+    if not os.path.exists(save_path):
+      os.makedirs(save_path)
     tf.keras.utils.plot_model(self.model,
-                              to_file='diagrams/air_four_classes_rnn.jpg',
+                              to_file=save_path + 'air_four_classes_rnn.jpg',
                               expand_nested=True, show_shapes=True)
 
   # Trains model
-  def fit(self, train_record: str, test_record: str, epochs: int):
+  def train(self, epochs: int):
     # Creates train/test datasets using tf.data.Dataset
-    train_ds, test_ds = create_dataset(train_record, test_record, self.sequencer)
-
+    train_ds, test_ds = create_dataset(self.dataset_folder, self.categories)
+    # Callback (used in tf.keras.Model.fit) to save the model with the best validation accuracy
+    save_path = self.experiments_folder + 'trained_model/air_four_classes_rnn/'
     # Callback (used in tf.keras.Model.fit) to save the model with the best validation accuracy
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
-      filepath='trained_model/air_four_classes_rnn/',
+      filepath=save_path,
       save_best_only=True,
       save_weights_only=False,
       monitor='val_loss',
       save_freq='epoch'
     )
-
     # Trains model using tf.keras.Model fit function
     self.model.fit(train_ds,
                    epochs=epochs,
@@ -206,16 +207,13 @@ class AirMulticlassRNN:
 
 
 if __name__ == '__main__':
-  # Dataset files
-  train_file = '../exports/2020-02-07 01-09-35/train.tfrecord'
-  test_file = '../exports/2020-02-07 01-09-35/test.tfrecord'
-
+  # Dataset folder
+  folder = '../exports/2020-02-07 01-09-35 (four classes)/'
   # Creates model and trains
-  model = AirMulticlassRNN(4, sequencer=True, batch_norm=False)
-  model.summary()
-  # model.fit(train_file, test_file, 100)
-
+  learner = AirMulticlassRNN(folder, use_batch_norm=False)
+  learner.summary()
+  learner.train(100)
   # Loads and evaluates model
-  saved = tf.keras.models.load_model('trained_model/air_four_classes_rnn/')
-  training_ds, testing_ds = create_dataset(train_file, test_file, sequencer=True)
-  display_performance(saved, training_ds, testing_ds)
+  saved_model = tf.keras.models.load_model(learner.experiments_folder + 'trained_model/air_four_classes_rnn/')
+  training_ds, testing_ds = create_dataset(learner.dataset_folder, learner.categories)
+  display_performance(saved_model, training_ds, testing_ds)
