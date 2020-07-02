@@ -4,7 +4,7 @@
 import tensorflow as tf
 
 
-class SpecSequencer(tf.keras.layers.Layer):
+class SpectrogamSequencer(tf.keras.layers.Layer):
   """
   A non-trainable layer to generate a sequence of potentially overlapping window from an input spectrogram.
 
@@ -13,7 +13,7 @@ class SpecSequencer(tf.keras.layers.Layer):
   """
 
   def __init__(self, window_size: int, window_overlap=0.5, name='Sequencer', **kwargs):
-    super(SpecSequencer, self).__init__(name=name, **kwargs)
+    super(SpectrogamSequencer, self).__init__(name=name, **kwargs)
     # Config to determine sequences
     self.window_size = window_size
     self.window_overlap = window_overlap
