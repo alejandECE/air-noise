@@ -12,7 +12,7 @@ from commons import LOCAL_DIAGRAM_FOLDER
 from commons import LOCAL_TRAINED_MODEL_FOLDER
 from commons import verify_tfrecords_from_directory
 from commons import get_classes_from_directory
-from utils import display_performance
+from classification_utils import display_performance
 import sys
 sys.path.append('../extraction')
 from tfrecord_dataset import feature_description
@@ -37,7 +37,7 @@ def parse_observation(example: tf.Tensor, categories: list) -> Tuple:
 
 
 # Creates dataset from tfrecord files
-def create_dataset(dataset_folder: str, categories: list) -> Tuple:
+def create_dataset(dataset_folder: pathlib.Path, categories: list) -> Tuple:
   # Creates training data pipeline
   train_ds = tf.data.TFRecordDataset([str(pathlib.Path(dataset_folder) / 'train.tfrecord')])
   train_ds = train_ds.map(lambda example: parse_observation(example, categories), num_parallel_calls=AUTOTUNE).cache()
@@ -58,9 +58,9 @@ class AirBinaryTemporalCNN:
   Airbus/Boeing aircraft take-off signals.
   """
 
-  def __init__(self, dataset_folder: str, use_regularizer=True, use_batch_norm=False):
+  def __init__(self, dataset_folder: pathlib.Path, use_regularizer=True, use_batch_norm=False):
     # Setups experiment folder
-    self.dataset_folder = pathlib.Path(dataset_folder)
+    self.dataset_folder = dataset_folder
     self.experiment_path, self.model_path, self.diagram_path = self.setup_experiment_folder()
     # Determine classes from folder
     categories = get_classes_from_directory(dataset_folder)
@@ -179,9 +179,6 @@ class AirBinaryTemporalCNN:
                    callbacks=[checkpoint],
                    verbose=2)
 
-  def save(self, path: str) -> None:
-    self.model.save(path)
-
 
 if __name__ == '__main__':
   # Parsing arguments
@@ -197,7 +194,7 @@ if __name__ == '__main__':
   # Dataset folder
   folder = args.folder
   # Creates model and trains
-  learner = AirBinaryTemporalCNN(folder, use_regularizer=use_regularizer, use_batch_norm=use_batch_norm)
+  learner = AirBinaryTemporalCNN(pathlib.Path(folder), use_regularizer=use_regularizer, use_batch_norm=use_batch_norm)
   learner.summary()
   learner.train(epochs)
   # Loads and evaluates model
