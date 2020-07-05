@@ -3,7 +3,6 @@
 
 import pathlib
 from collections import namedtuple
-from typing import Tuple, List
 
 
 # Evaluation comparison namedtuple

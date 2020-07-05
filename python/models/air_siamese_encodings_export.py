@@ -9,12 +9,7 @@ import tensorflow as tf
 from air_siamese_architecture import parse_observation
 from air_siamese_architecture import get_embedding
 from air_siamese_architecture import SIBLING_MODEL_NAME
-from commons import AUTOTUNE
-from commons import get_tfrecords_from_folder
-from commons import get_model_from_experiment
-from commons import get_dataset_from_experiment
-from commons import generate_embeddings_path
-
+import commons
 
 # Constants
 BATCH_SIZE = 64
@@ -31,12 +26,12 @@ def create_export_dataset(tfrecords: list, sibling: tf.keras.Model) -> tf.data.D
   # Reads tfrecords from files
   records_ds = tf.data.TFRecordDataset(tfrecords)
   # Parses observation from tfrecords
-  records_ds = records_ds.map(parse_observation, num_parallel_calls=AUTOTUNE)
+  records_ds = records_ds.map(parse_observation, num_parallel_calls=commons.AUTOTUNE)
   # Batches dataset
   records_ds = records_ds.batch(BATCH_SIZE)
   # Get the embedding dataset using the model trained
   embedding_ds = records_ds.map(lambda inputs, labels: get_embedding(sibling, inputs, labels),
-                                num_parallel_calls=AUTOTUNE).unbatch().prefetch(1)
+                                num_parallel_calls=commons.AUTOTUNE).unbatch().prefetch(1)
   return embedding_ds
 
 
@@ -70,7 +65,8 @@ if __name__ == '__main__':
   folder = args.folder
   # Creates tf.data.Dataset with labeled embeddings observations
   experiment_path = pathlib.Path(folder)
-  model = get_model_from_experiment(experiment_path, SIBLING_MODEL_NAME)
-  ds = create_export_dataset(get_tfrecords_from_folder(get_dataset_from_experiment(experiment_path)), model)
+  model = commons.get_model_from_experiment(experiment_path, SIBLING_MODEL_NAME)
+  ds = create_export_dataset(commons.get_tfrecords_from_folder(commons.get_dataset_from_experiment(experiment_path)),
+                             model)
   # Export observations to tfrecords
-  export_embeddings_from_dataset(ds, generate_embeddings_path(experiment_path))
+  export_embeddings_from_dataset(ds, commons.generate_embeddings_path(experiment_path))

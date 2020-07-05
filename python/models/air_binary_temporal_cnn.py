@@ -5,12 +5,7 @@ import argparse
 import pathlib
 from typing import Tuple
 import tensorflow as tf
-from commons import AUTOTUNE
-from commons import generate_experiment_path
-from commons import generate_diagram_path
-from commons import generate_model_path
-from commons import verify_default_records_from_folder
-from commons import get_classes_from_folder
+import commons
 from classification_utils import display_performance
 import sys
 sys.path.append('../extraction')
@@ -39,11 +34,13 @@ def parse_observation(example: tf.Tensor, categories: list) -> Tuple:
 def create_dataset(dataset_folder: pathlib.Path, categories: list) -> Tuple:
   # Creates training data pipeline
   train_ds = tf.data.TFRecordDataset([str(pathlib.Path(dataset_folder) / 'train.tfrecord')])
-  train_ds = train_ds.map(lambda example: parse_observation(example, categories), num_parallel_calls=AUTOTUNE).cache()
+  train_ds = train_ds.map(lambda example: parse_observation(example, categories),
+                          num_parallel_calls=commons.AUTOTUNE).cache()
   train_ds = train_ds.shuffle(BUFFER_SIZE).batch(BATCH_SIZE).prefetch(1)
   # Creates test data pipeline
   test_ds = tf.data.TFRecordDataset([str(pathlib.Path(dataset_folder) / 'test.tfrecord')])
-  test_ds = test_ds.map(lambda example: parse_observation(example, categories), num_parallel_calls=AUTOTUNE).cache()
+  test_ds = test_ds.map(lambda example: parse_observation(example, categories),
+                        num_parallel_calls=commons.AUTOTUNE).cache()
   test_ds = test_ds.batch(BATCH_SIZE).prefetch(1)
   return train_ds, test_ds
 
@@ -62,7 +59,7 @@ class AirBinaryTemporalCNN:
     self.dataset_folder = dataset_folder
     self.experiment_path, self.model_path, self.diagram_path = self.setup_experiment_folder()
     # Determine classes from folder
-    categories = get_classes_from_folder(dataset_folder)
+    categories = commons.get_classes_from_folder(dataset_folder)
     # Verify binary
     assert len(categories) == 2, 'Wrong number of classes. Expecting two.'
     self.categories = categories
@@ -81,13 +78,13 @@ class AirBinaryTemporalCNN:
   # Setup experiment folder
   def setup_experiment_folder(self) -> Tuple:
     # Verify train.tfrecord and test.tfrecord exist in dataset folder
-    verify_default_records_from_folder(self.dataset_folder)
+    commons.verify_default_records_from_folder(self.dataset_folder)
     # Experiment path (root folder of the experiment)
-    experiment_path = generate_experiment_path(self.dataset_folder)
+    experiment_path = commons.generate_experiment_path(self.dataset_folder)
     # Model path (where it is saved during training)
-    model_path = generate_model_path(experiment_path, MODELS_NAME)
+    model_path = commons.generate_model_path(experiment_path, MODELS_NAME)
     # Keras model diagram
-    diagram_path = generate_diagram_path(experiment_path, MODELS_NAME)
+    diagram_path = commons.generate_diagram_path(experiment_path, MODELS_NAME)
     # Returns all relevant paths as tuple
     return experiment_path, model_path, diagram_path
 

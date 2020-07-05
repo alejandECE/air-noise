@@ -5,7 +5,7 @@ import argparse
 import pathlib
 import time
 import air_siamese_logs as logging
-from typing import Tuple, List
+from typing import Tuple
 from spectrogram_sequencer import SpectrogamSequencer
 import tensorflow as tf
 import numpy as np
@@ -27,6 +27,7 @@ WINDOW_OVERLAP = 0.5
 
 
 def contrastive_loss(emb1: tf.Tensor, emb2: tf.Tensor, margin: float):
+  tf.math.square(emb1 - emb2)
   pass
 
 
