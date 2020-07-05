@@ -1,16 +1,28 @@
 #  Created by Luis A. Sanchez-Perez (alejand@umich.edu).
 #  Copyright © Do not distribute or use without authorization from author
 
-from commons import AIRCRAFT_EIGHT_LABELS
-from commons import AUTOTUNE
-from typing import Tuple
-from tfrecord_dataset import feature_description
-import tensorflow as tf
-import numpy as np
+import argparse
+import pathlib
 import time
 import datetime
-import os
+from collections import namedtuple
+from typing import Tuple, List
+from spectrogram_sequencer import SpectrogamSequencer
+import tensorflow as tf
+import numpy as np
+from commons import AUTOTUNE
+from commons import generate_experiment_path
+from commons import generate_model_path
+from commons import generate_diagram_path
+from commons import get_classes_from_folder
+from commons import get_tfrecords_from_folder
+import sys
 
+sys.path.append('../extraction')
+from tfrecord_dataset import feature_description
+
+# Constants
+SIBLING_MODEL_NAME = 'air_siamense_sibling'
 TIME_SIZE = 401
 MFCC_SIZE = 128
 POSITIVE_SAMPLES = 32
@@ -18,6 +30,14 @@ NEGATIVE_SAMPLES = 32
 BUFFER_SIZE = 1000
 WINDOW_SIZE = 50
 WINDOW_OVERLAP = 0.5
+
+# Evaluation tuples to keep record
+Comparison = namedtuple('Comparison', ['distance', 'category'])
+Entry = namedtuple('Entry', ['category', 'comparisons'])
+
+
+def contrastive_loss(emb1: tf.Tensor, emb2: tf.Tensor, margin: float):
+  pass
 
 
 # Computes the absolute difference of two embeddings
@@ -27,28 +47,6 @@ class AbsoluteSimilarity(tf.keras.layers.Layer):
 
   def call(self, emb1, emb2):
     return tf.math.abs(emb1 - emb2)
-
-
-# Computes the chi-squared similarity between two embeddings
-class ChiSquaredSimilarity(tf.keras.layers.Layer):
-  def __init__(self):
-    super(AbsoluteSimilarity, self).__init__()
-
-  def call(self, emb1, emb2):
-    return tf.math.square(emb1 - emb2) / (emb1 + emb2)
-
-
-# Creates a sequence of windows from a spectrogram
-@tf.function
-def build_sequence(spec: tf.Tensor, label: tf.Tensor) -> Tuple:
-  samples = tf.shape(spec)[1]
-  start = tf.range(0, samples - WINDOW_SIZE, int(WINDOW_SIZE * WINDOW_OVERLAP))
-  end = tf.range(WINDOW_SIZE, samples, int(WINDOW_SIZE * WINDOW_OVERLAP))
-  sequence = tf.map_fn(lambda index: spec[:, index[0]:index[1]],
-                       tf.stack([start, end], axis=1),
-                       back_prop=False,
-                       dtype=tf.float32)
-  return sequence, label
 
 
 # Parses observation from proto format
@@ -65,21 +63,17 @@ def parse_observation(example: tf.Tensor) -> Tuple:
 
 # Gets embedding by applying trained model
 @tf.function
-def get_embedding(model_path: str, batch_inputs: tf.Tensor, batch_labels: tf.Tensor, ) -> Tuple:
-  # Load trained sibling model
-  sibling = tf.keras.models.load_model(model_path)
+def get_embedding(sibling: tf.keras.Model, batch_inputs: tf.Tensor, batch_labels: tf.Tensor) -> Tuple:
   # Evaluates model to get embedding
   return sibling(batch_inputs), batch_labels
 
 
 # Creates dataset of pairs for training only using observations from the categories listed
-def create_training_dataset(records_path: str, categories: list) -> tf.data.Dataset:
+def create_training_dataset(tfrecords: list, categories: list) -> tf.data.Dataset:
   # Reads tfrecords from file
-  records_ds = tf.data.TFRecordDataset([records_path])
+  records_ds = tf.data.TFRecordDataset(tfrecords)
   # Parses observation from tfrecords
   records_ds = records_ds.map(parse_observation, num_parallel_calls=AUTOTUNE)
-  # Builds a sequence to feed siamese networks
-  records_ds = records_ds.map(build_sequence, num_parallel_calls=AUTOTUNE)
   # Creates list of datasets, each having observations from only one class
   labeled_datasets = []
   for category in categories:
@@ -130,19 +124,19 @@ def create_training_dataset(records_path: str, categories: list) -> tf.data.Data
 
 # Compute the squared distance between two embeddings
 def compute_squared_distance(target_embedding: tf.Tensor, embeddings_batch: tf.Tensor):
-  return ((target_embedding.numpy() - embeddings_batch.numpy())**2).sum(axis=1)
+  return ((target_embedding.numpy() - embeddings_batch.numpy()) ** 2).sum(axis=1)
 
 
 # Creates dataset for n-way one shot learning for testing using the categories listed only
-def create_test_dataset(model_path: str, records_path: str, categories: list, n_way: int):
+def create_test_dataset(tfrecords: list, categories: list, sibling: tf.keras.Model, n_way: int):
   # Reads tfrecords from file
-  records_ds = tf.data.TFRecordDataset([records_path])
+  records_ds = tf.data.TFRecordDataset(tfrecords)
   # Parses observation from tfrecords
   records_ds = records_ds.map(parse_observation, num_parallel_calls=AUTOTUNE)
-  # Builds a sequence to feed siamese networks
-  records_ds = records_ds.map(build_sequence, num_parallel_calls=AUTOTUNE).batch(POSITIVE_SAMPLES + NEGATIVE_SAMPLES)
+  # Define batches
+  records_ds = records_ds.batch(POSITIVE_SAMPLES + NEGATIVE_SAMPLES)
   # Get the embedding dataset using the model trained
-  embedding_ds = records_ds.map(lambda inputs, labels: get_embedding(model_path, inputs, labels),
+  embedding_ds = records_ds.map(lambda inputs, labels: get_embedding(sibling, inputs, labels),
                                 num_parallel_calls=AUTOTUNE).unbatch().cache()
   # Creates a dictionary of datasets with (keys, values): label, (positive samples, negative samples)
   datasets = {}
@@ -158,62 +152,61 @@ def create_test_dataset(model_path: str, records_path: str, categories: list, n_
   return datasets
 
 
-# Use n-way one shot learning evaluation
-def evaluate(model_path: str, records_path: str, categories: list, evals: int = 100, n_way=4) -> list:
-  # Creates dataset to sample from
-  datasets = create_test_dataset(model_path, records_path, categories, n_way)
-  # Performs n-way one shot learning
-  evaluations = []
-  # Selects random classes to evaluate
-  sampled_categories = np.random.choice(categories, evals, replace=True)
-  for one_shot_category in sampled_categories:
-    start = time.perf_counter()
-    # Gets datasets for evaluating current category
-    positive_ds, negative_ds = datasets[one_shot_category]
-    iter_positive = iter(positive_ds)
-    iter_negative = iter(negative_ds)
-    # Gets the one shot observation to learn from
-    one_shot_obs = iter_positive.get_next()
-    # Compares the one shot embedding with one sample drawn randomly from the same class
-    positive_obs = iter_positive.get_next()
-    distances = [
-      (compute_squared_distance(one_shot_obs, tf.expand_dims(positive_obs, axis=0))[0], one_shot_category)
-    ]
-    # Compares the one shot embedding with n - 1 samples from drawn randomly from the other classes
-    negative_obs, negative_labels = iter_negative.get_next()
-    negative_distances = compute_squared_distance(one_shot_obs, negative_obs)
-    for value, label in zip(negative_distances, negative_labels):
-      distances.append((value, label.numpy()))
+# Logs the resulting entry from the n-way evaluation routine
+def log_evaluation_entry(elapsed_time: float, entry: Tuple[str, list]) -> None:
+  print('Entry ({:.2f} secs):'.format(elapsed_time), entry)
 
-    entry = (one_shot_category, sorted(distances, key=lambda values: values[0]))
-    evaluations.append(entry)
-    end = time.perf_counter()
-    print('Entry ({:.2f} secs):'.format(end - start), entry)
-  # Computing matching estimations
-  matching = [label == distances[0][1] for label, distances in evaluations]
-  print('Closest matching target: {}'.format(sum(matching)))
-  return evaluations
+
+# Logs the summary from the n-way evaluation routine
+def log_evaluation_summary(evaluations: List[Entry], n_way: int) -> None:
+  print('\nResults Summary')
+  for i in range(1, n_way // 2 + 1):
+    matching = [
+      any([comparison.category == entry.category for comparison in entry.comparisons[:i]])
+      for entry in evaluations
+    ]
+    print('Accuracy (Top {}): {}'.format(i, sum(matching) / len(matching)))
 
 
 class AirSiameseLearner:
   """
   Siamese architecture to learn embeddings that allow to differentiate aircraft classes based on noise during take-off.
   """
-  def __init__(self, use_regularization=True, use_batch_norm=False):
+
+  def __init__(self, dataset_folder: pathlib.Path, leftout: int = 0, use_regularizer=True, use_batch_norm=False,
+               architecture='absolute'):
+    # Setups experiment folder
+    self.dataset_folder = dataset_folder
+    self.experiment_path, self.model_path, self.diagram_path = self.setup_experiment_folder()
+    # Determine classes from folder
+    self.categories = get_classes_from_folder(dataset_folder)
+    self.leftout = leftout
     # Stores options
-    self.use_regularization = use_regularization
+    self.architecture = architecture
+    self.use_regularization = use_regularizer
     self.use_batch_norm = use_batch_norm
     # Builds model architecture
-    self.siamese, self.sibling = self.build_model()
-    # Selects loss and optimizer
-    self.loss = tf.keras.losses.BinaryCrossentropy()
-    self.optimizer = tf.keras.optimizers.Adam()
+    self.loss = None
+    self.optimizer = None
+    self.metric = None
+    self.siamese, self.sibling = self.build_siamese_model()
+
+  # Setup experiment folder
+  def setup_experiment_folder(self) -> Tuple:
+    # Experiment path (root folder of the experiment)
+    experiment_path = generate_experiment_path(self.dataset_folder)
+    # Model path (where it is saved during training)
+    model_path = generate_model_path(experiment_path, SIBLING_MODEL_NAME)
+    # Keras model diagram
+    diagram_path = generate_diagram_path(experiment_path, SIBLING_MODEL_NAME)
+    # Returns all relevant paths as tuple
+    return experiment_path, model_path, diagram_path
 
   # Builds siamese network and sibling network
-  def build_model(self) -> Tuple[tf.keras.Model, tf.keras.Model]:
+  def build_siamese_model(self) -> Tuple[tf.keras.Model, tf.keras.Model]:
     # Inputs to the siamese model. Data is fed as a pair (input1, input2)
-    input1 = tf.keras.layers.Input((None, MFCC_SIZE, WINDOW_SIZE, 1), name='spec1')
-    input2 = tf.keras.layers.Input((None, MFCC_SIZE, WINDOW_SIZE, 1), name='spec2')
+    input1 = tf.keras.layers.Input((MFCC_SIZE, TIME_SIZE, 1), name='spec1')
+    input2 = tf.keras.layers.Input((MFCC_SIZE, TIME_SIZE, 1), name='spec2')
     # Actual model receiving a spectrogram and outputting an embedding
     sibling = self.build_sibling_model()
     # Embeddings for both inputs
@@ -226,78 +219,103 @@ class AirSiameseLearner:
     output = dense(similarity)
     # Builds siamese architecture
     siamese = tf.keras.models.Model([input1, input2], output, name='siamese_nn')
+    # Selects loss and optimizer
+    self.optimizer = tf.keras.optimizers.Adam()
+    if self.architecture == 'absolute':
+      self.metric = tf.keras.metrics.BinaryAccuracy()
+      self.loss = tf.keras.losses.BinaryCrossentropy()
+    elif self.architecture == 'contrastive':
+      self.loss = contrastive_loss
     # Return tuple of models
     return siamese, sibling
 
   # Builds sibling model architecture returning a tf.keras.Model
   def build_sibling_model(self) -> tf.keras.Model:
     # Create inputs
-    spectrogram = tf.keras.layers.Input((None, MFCC_SIZE, WINDOW_SIZE, 1))
+    spectrogram = tf.keras.layers.Input((MFCC_SIZE, TIME_SIZE, 1))
+    # Creates spectrogram sequencer layer
+    sequencer = SpectrogamSequencer(WINDOW_SIZE, WINDOW_OVERLAP)
     # First convolutional layer to find spatial features in a segment of the spectrogram. Timed distributed to get
     # applied to every segment of the inputted spectrogram.
     conv1 = tf.keras.layers.TimeDistributed(
-      tf.keras.layers.Conv2D(32, 5, padding='valid', activation=tf.nn.relu, data_format='channels_last'),
-      name='Conv1'
-    )
-    # Pooling
-    pooling1 = tf.keras.layers.TimeDistributed(
-      tf.keras.layers.MaxPool2D(3),
-      name='Pool1'
+      tf.keras.layers.Conv2D(32, 5, padding='valid',
+                             data_format='channels_last',
+                             use_bias=False if self.use_batch_norm else True,
+                             name='Conv1')
     )
     # Batch norm layer (only used if requested)
     batch_norm1 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm1')
+    # Activation for Conv1
+    activation1 = tf.keras.layers.Activation(tf.nn.relu, name='Relu1')
+    # Pooling
+    pooling1 = tf.keras.layers.TimeDistributed(
+      tf.keras.layers.MaxPool2D(3, name='Pool1')
+    )
     # Second convolutional layer. Timed distributed to get applied to every segment of the inputted spectrogram.
     conv2 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.Conv2D(32, 5,
                              padding='valid',
-                             activation=tf.nn.relu,
-                             data_format='channels_last'),
-      name='Conv2'
+                             data_format='channels_last',
+                             use_bias=False if self.use_batch_norm else True,
+                             name='Conv2')
     )
+    # Batch norm layer (only used if requested)
+    batch_norm2 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm2')
+    # Activation for second convolutional layer
+    activation2 = tf.keras.layers.Activation(tf.nn.relu, name='Relu2')
     # Third convolutional layer. Timed distributed.
     conv3 = tf.keras.layers.TimeDistributed(
       tf.keras.layers.Conv2D(32, 5,
                              padding='valid',
-                             activation=tf.nn.relu,
-                             data_format='channels_last'),
-      name='Conv3'
+                             data_format='channels_last',
+                             use_bias=False if self.use_batch_norm else True,
+                             name='Conv3')
     )
+    # Batch norm layer (only used if requested)
+    batch_norm3 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm3')
+    # Activation for third convolutional layer
+    activation3 = tf.keras.layers.Activation(tf.nn.relu, name='Relu3')
     # Pooling
     pooling2 = tf.keras.layers.TimeDistributed(
-      tf.keras.layers.MaxPool2D(3),
-      name='Pool2'
+      tf.keras.layers.MaxPool2D(3, name='Pool2')
     )
     # Flatten results from convolutions/pooling to be fed to the lstm layers
     flatten1 = tf.keras.layers.TimeDistributed(
-      tf.keras.layers.Flatten(),
-      name='Flatten'
+      tf.keras.layers.Flatten(name='Flatten')
     )
-    # Batch norm layer (only used if requested)
-    batch_norm2 = tf.keras.layers.BatchNormalization(axis=1, name='BatchNorm2')
     # Dropout layer
     dropout1 = tf.keras.layers.Dropout(0.3)
     # Recurrent layer to capture temporal relationships
     lstm1 = tf.keras.layers.LSTM(32, return_state=False, return_sequences=False)
     # Creates connections between layers of the model
-    x = conv1(spectrogram)
-    x = pooling1(x)
+    x = sequencer(spectrogram)
+    x = conv1(x)
     if self.use_batch_norm:
       x = batch_norm1(x)
+    x = activation1(x)
+    x = pooling1(x)
     x = conv2(x)
+    if self.use_batch_norm:
+      x = batch_norm2(x)
+    x = activation2(x)
     x = conv3(x)
+    if self.use_batch_norm:
+      x = batch_norm3(x)
+    x = activation3(x)
     x = pooling2(x)
     x = flatten1(x)
     if self.use_regularization:
       x = dropout1(x)
-    if self.use_batch_norm:
-      x = batch_norm2(x)
     embedding = lstm1(x)
     return tf.keras.Model(spectrogram, embedding, name='sibling_nn')
 
   # Prints out the model's summary
   def summary(self) -> None:
     self.siamese.summary()
-    tf.keras.utils.plot_model(self.siamese, to_file='diagrams/siamese.jpg', show_shapes=True, expand_nested=True)
+    self.sibling.summary()
+    tf.keras.utils.plot_model(self.sibling,
+                              to_file=str(self.diagram_path),
+                              expand_nested=True, show_shapes=True, show_layer_names=False)
 
   @tf.function
   def train_step(self, batch):
@@ -314,14 +332,18 @@ class AirSiameseLearner:
     # Updates params
     self.optimizer.apply_gradients(zip(gradients, variables))
     # Computes metric
-    acc = tf.keras.metrics.binary_accuracy(tf.cast(y_true, tf.float32), tf.squeeze(y_pred))
+    metric = self.metric(tf.cast(y_true, tf.float32), tf.squeeze(y_pred))
     # Returns loss and metric
-    return loss, acc
+    return loss, metric
 
   # Trains model
-  def fit(self, records_path: str, categories: list, epochs: int) -> None:
-    # Creates train dataset using tf.data.Dataset
-    train_ds = create_training_dataset(records_path, categories)
+  def train(self, epochs: int) -> None:
+    # Creates dataset leaving out the least common classes
+    filtered_categories = self.categories[:-self.leftout] if self.leftout > 0 else self.categories
+    train_ds = create_training_dataset(
+      get_tfrecords_from_folder(self.dataset_folder),
+      filtered_categories
+    )
     # Creates an iterator to request batches
     iterator = iter(train_ds)
     # Training loop
@@ -330,30 +352,94 @@ class AirSiameseLearner:
       # Gets a batch from dataset
       batch = iterator.get_next()
       # Performs update step
-      loss, acc = self.train_step(batch)
+      loss, metric = self.train_step(batch)
       # Logs training results
       print('\nEpoch {} out of {} complete ({:.2f} secs) -- Batch Loss: {:.4f} -- Batch Acc: {:.2f}'.format(
         epoch + 1,
         epochs,
         time.perf_counter() - start,
         loss,
-        tf.squeeze(acc)
+        tf.squeeze(metric)
       ), end='')
+    print()
+    # Stores resulting sibling network
+    tf.keras.models.save_model(self.sibling, str(self.model_path))
+
+  # Use n-way one shot learning evaluation
+  def evaluate(self, evals: int = 100, n_way=4) -> list:
+    # Creates dataset to sample from
+    filtered_categories = self.categories[-self.leftout:] if self.leftout > 0 else self.categories
+    datasets = create_test_dataset(
+      get_tfrecords_from_folder(self.dataset_folder),
+      filtered_categories,
+      self.sibling,
+      n_way
+    )
+    # Performs n-way one shot learning
+    evaluations = []
+    # Selects random classes to evaluate
+    sampled_categories = np.random.choice(filtered_categories, evals, replace=True)
+    for one_shot_category in sampled_categories:
+      start = time.perf_counter()
+      # Gets datasets for evaluating current category
+      positive_ds, negative_ds = datasets[one_shot_category]
+      iter_positive = iter(positive_ds)
+      iter_negative = iter(negative_ds)
+      # Gets the one shot observation to learn from
+      one_shot_obs = iter_positive.get_next()
+      # Compares the one shot embedding with one sample drawn randomly from the same class
+      positive_obs = iter_positive.get_next()
+      comparisons = [
+        Comparison(
+          distance=compute_squared_distance(one_shot_obs, tf.expand_dims(positive_obs, axis=0))[0],
+          category=one_shot_category
+        )
+      ]
+      # Compares the one shot embedding with n - 1 samples from drawn randomly from the other classes
+      negative_obs, negative_labels = iter_negative.get_next()
+      negative_distances = compute_squared_distance(one_shot_obs, negative_obs)
+      for value, label in zip(negative_distances, negative_labels):
+        comparisons.append(
+          Comparison(
+            distance=value,
+            category=label.numpy()
+          )
+        )
+      # Generates evaluation entry
+      entry = Entry(
+        category=one_shot_category,
+        comparisons=sorted(comparisons, key=lambda comparison: comparison.distance)
+      )
+      evaluations.append(entry)
+      end = time.perf_counter()
+      # Logs entry
+      log_evaluation_entry(end - start, entry)
+    # Computing matching estimations
+    log_evaluation_summary(evaluations, n_way)
+
+    return evaluations
 
 
 if __name__ == '__main__':
   # Selects CPU or GPU
   # os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-  # Training/Test data files
-  train_file = '../exports/2020-03-01 07-34-19/train.tfrecord'
-  test_file = '../exports/2020-03-01 07-34-19/test.tfrecord'
+  # Parsing arguments
+  parser = argparse.ArgumentParser()
+  parser.add_argument('folder', help='Dataset folder with tfrecords', type=str)
+  parser.add_argument('--epochs', help='Epochs to train (Default: 100)', type=int)
+  parser.add_argument('--leftout', help='Categories leftout (Default: 0)', type=int)
+  parser.add_argument('--use_regularizer', help='Use regularization', action="store_true")
+  parser.add_argument('--use_batch_norm', help='Use batch normalization', action="store_true")
+  args = parser.parse_args()
+  epochs = args.epochs if args.epochs else 100
+  leftout = args.leftout if args.leftout else 0
+  use_regularizer = True if args.use_regularizer else False
+  use_batch_norm = True if args.use_batch_norm else False
+  # Dataset folder
+  folder = args.folder
   # Performs training using only the first four classes
-  learner = AirSiameseLearner(use_regularization=True, use_batch_norm=False)
-  learner.fit(train_file, AIRCRAFT_EIGHT_LABELS, 600)
+  learner = AirSiameseLearner(pathlib.Path(folder), leftout=leftout, use_regularizer=True, use_batch_norm=False)
   learner.summary()
-  # Saves trained sibling model
-  date_string = datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S')
-  save_path = 'trained_model/air_siamense_sibling ' + date_string + '/'
-  tf.keras.models.save_model(learner.sibling, save_path)
-  # Evaluate trained model
-  evaluations = evaluate(save_path, test_file, AIRCRAFT_EIGHT_LABELS)
+  learner.train(epochs)
+  # Evaluates the model using n-way one shot learning
+  learner.evaluate(evals=100, n_way=8)

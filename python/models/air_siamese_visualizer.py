@@ -1,12 +1,13 @@
 #  Created by Luis A. Sanchez-Perez (alejand@umich.edu).
 #  Copyright © Do not distribute or use without authorization from author
-
+import argparse
+import pathlib
 from typing import Tuple
 import tensorflow as tf
 from tensorboard.plugins import projector
-
 from commons import AUTOTUNE
-from commons import AIRCRAFT_EIGHT_LABELS
+from commons import get_classes_from_file
+from commons import generate_tensorboard_path
 from air_siamese_encodings_export import feature_description
 from sklearn.decomposition import IncrementalPCA
 from sklearn.decomposition import PCA
@@ -31,6 +32,8 @@ def parse_observation(example: tf.Tensor) -> Tuple:
 # Only returns true for the listed categories
 @tf.function
 def filter_categories(label: tf.Tensor, categories: list) -> tf.Tensor:
+  if len(categories) == 0:
+    return True
   return tf.reduce_any(tf.equal(label, categories))
 
 
@@ -62,7 +65,7 @@ def find_pca(dataset: tf.data.Dataset, components: int) -> PCA:
 
 
 # Plots embeddings in 3D
-def plot_embeddings_3d(dataset: tf.data.Dataset, categories: list, method='normal'):
+def plot_embeddings_3d(dataset: tf.data.Dataset, categories: list, method='normal') -> None:
   # Finds PCA
   if method == 'normal':
     pca = find_pca(dataset, 3)
@@ -96,7 +99,7 @@ def plot_embeddings_3d(dataset: tf.data.Dataset, categories: list, method='norma
 
 
 # Plots embeddings in 2D
-def plot_embeddings_2d(dataset: tf.data.Dataset, categories: list, method='normal'):
+def plot_embeddings_2d(dataset: tf.data.Dataset, categories: list, method='normal') -> None:
   # Finds PCA
   if method == 'normal':
     pca = find_pca(dataset, 3)
@@ -126,44 +129,42 @@ def plot_embeddings_2d(dataset: tf.data.Dataset, categories: list, method='norma
   plt.show()
 
 
-# Creates a directory to log info for Tensorboard
-def create_logdir():
-  log_dir = "./logs/fit/air_siamese/"
-  return log_dir
-
-
 # Exports embeddings to Tensorboard
-def export_to_tensorboard(dataset: tf.data.Dataset):
+def export_to_tensorboard(dataset: tf.data.Dataset, embedding_path: pathlib.Path):
   # Set up a logs directory, so Tensorboard knows where to look for files
-  log_dir = create_logdir()
-  if not os.path.exists(log_dir):
-    os.makedirs(log_dir)
-    print(log_dir)
+  log_path = generate_tensorboard_path(embedding_path)
   # Creates embedding checkpoint with data
-  with open(os.path.join(log_dir, 'metadata.tsv'), "w") as f:
+  with open(log_path / 'metadata.tsv', "w") as f:
     embeddings = []
     for batch_embeddings, batch_labels in dataset:
       embeddings.append(batch_embeddings)
       for label in batch_labels:
         f.write("{}\n".format(label))
-    checkpoint = tf.train.Checkpoint(embedding=tf.Variable(tf.concat(embeddings, axis=0)))
-    checkpoint.save(os.path.join(log_dir, "embedding.ckpt"))
+    checkpoint = tf.train.Checkpoint(embeddings=tf.Variable(tf.concat(embeddings, axis=0)))
+    checkpoint.save(str(log_path / "embeddings.ckpt"))
   # Set up config
   config = projector.ProjectorConfig()
   embedding = config.embeddings.add()
   # The name of the tensor will be suffixed by `/.ATTRIBUTES/VARIABLE_VALUE`
-  embedding.tensor_name = "embedding/.ATTRIBUTES/VARIABLE_VALUE"
+  embedding.tensor_name = "embeddings/.ATTRIBUTES/VARIABLE_VALUE"
   embedding.metadata_path = 'metadata.tsv'
-  projector.visualize_embeddings(log_dir, config)
+  projector.visualize_embeddings(str(log_path), config)
 
 
 if __name__ == '__main__':
+  # Parsing arguments
+  parser = argparse.ArgumentParser()
+  parser.add_argument('folder', help='Embedding folder containing a embeddings.tfrecord file', type=str)
+  parser.add_argument('classes', help='Text file name with listed classes to include', type=str)
   # Embeddings file
-  embeddings_path = 'embeddings/air_siamense_sibling 2020-06-28 23-33-06.tfrecord'
+  args = parser.parse_args()
+  folder = pathlib.Path(args.folder)
+  embeddings_path = folder / 'embeddings.tfrecord'
+  classes_path = folder / args.classes
   # Classes to plot
-  classes = AIRCRAFT_EIGHT_LABELS
+  classes = get_classes_from_file(classes_path)
   # Loads embeddings
-  embedding_ds = create_embeddings_dataset(embeddings_path, classes)
+  embedding_ds = create_embeddings_dataset(str(embeddings_path), classes)
   # Plots dataset 2d
   plot_embeddings_2d(embedding_ds, classes)
   plot_embeddings_2d(embedding_ds, classes, method='incremental')
@@ -171,4 +172,4 @@ if __name__ == '__main__':
   plot_embeddings_3d(embedding_ds, classes)
   plot_embeddings_3d(embedding_ds, classes, method='incremental')
   # Exports to Tensorboard
-  export_to_tensorboard(embedding_ds)
+  export_to_tensorboard(embedding_ds, embeddings_path)

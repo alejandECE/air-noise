@@ -1,6 +1,7 @@
 #  Created by Luis A. Sanchez-Perez (alejand@umich.edu).
 #  Copyright © Do not distribute or use without authorization from author
 
+import datetime
 from collections import namedtuple
 import tensorflow as tf
 import pathlib
@@ -11,15 +12,16 @@ AUTOTUNE = tf.data.experimental.AUTOTUNE
 EXPERIMENTS_FOLDER = 'experiments'
 LOCAL_DIAGRAM_FOLDER = 'diagrams'
 LOCAL_TRAINED_MODEL_FOLDER = 'trained_model'
+LOCAL_EMBEDDING_FOLDER = 'embeddings'
 
 # To keep track of classes in folder
 Entry = namedtuple('Entry', ['label', 'samples'])
 
 
 # Get classes/categories/labels from directory sorted with the most common one first
-def get_classes_from_directory(directory: pathlib.Path) -> list:
+def get_classes_from_folder(folder: pathlib.Path) -> list:
   classes = []
-  for root, _, files in os.walk(directory):
+  for root, _, files in os.walk(folder):
     for file in files:
       # A folder is considered a category if contains any npy file
       if '.npy' in file:
@@ -32,26 +34,84 @@ def get_classes_from_directory(directory: pathlib.Path) -> list:
 
 
 # Get tfrecords files in folder
-def get_tfrecords_from_directory(directory: pathlib.Path) -> list:
+def get_tfrecords_from_folder(folder: pathlib.Path) -> list:
   records = []
-  for root, _, files in os.walk(directory):
-    for file in files:
-      if '.tfrecord' in file:
-        records.append(str(pathlib.Path(root) / file))
+  for element in os.listdir(folder):
+    if '.tfrecord' in element and 'embeddings' not in element:
+      records.append(str(pathlib.Path(folder) / element))
   return records
 
 
 # Verify the tfrecord files exist in the directory
-def verify_tfrecords_from_directory(directory: pathlib.Path, records_names: list = None) -> bool:
+def verify_default_records_from_folder(folder: pathlib.Path, records_names: list = None) -> None:
   if records_names is None:
     records_names = ['train.tfrecord', 'test.tfrecord']
-  return all([(directory / name).exists() for name in records_names])
+  msg = 'The records do not exist in the folder specified '
+  assert all([(folder / name).exists() for name in records_names]), msg
+
+
+# Returns a trained model from the given the experiment folder
+def get_model_from_experiment(experiment_folder: pathlib.Path, model_name: str) -> tf.keras.Model:
+  return tf.keras.models.load_model(str(experiment_folder / LOCAL_TRAINED_MODEL_FOLDER / model_name))
+
+
+# Generates an experiment folder using current timestamp for the given dataset folder
+def generate_experiment_path(dataset_folder: pathlib.Path) -> pathlib.Path:
+  path = dataset_folder / EXPERIMENTS_FOLDER / datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+  if not path.exists():
+    path.mkdir(parents=True)
+  return path
+
+
+# Generates the path of the model for the given experiment folder
+def generate_model_path(experiment_folder: pathlib.Path, model_name: str) -> pathlib.Path:
+  path = experiment_folder / LOCAL_TRAINED_MODEL_FOLDER / model_name
+  if not path.exists():
+    path.mkdir(parents=True)
+  return path
+
+
+# Generates diagram folder for the given experiment folder
+def generate_diagram_path(experiment_folder: pathlib.Path, model_name: str) -> pathlib.Path:
+  path = experiment_folder / LOCAL_DIAGRAM_FOLDER
+  if not path.exists():
+    path.mkdir(parents=True)
+  return path / (model_name + '.jpg')
+
+
+# Generates embedding folder using current timestamp for the given experiment folder
+def generate_embeddings_path(experiment_folder: pathlib.Path) -> pathlib.Path:
+  path = experiment_folder / LOCAL_EMBEDDING_FOLDER / datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+  if not path.exists():
+    path.mkdir(parents=True)
+  return path / 'embeddings.tfrecord'
+
+
+def generate_tensorboard_path(embedding_path: pathlib.Path) -> pathlib.Path:
+  path = embedding_path.parent / 'tensorboard'
+  if not path.exists():
+    path.mkdir(parents=True)
+  return path
+
+# Returns experiment folder for a given embeddings folder
+def get_experiment_from_embeddings(embeddings_path: pathlib.Path) -> pathlib.Path:
+  return embeddings_path.parent.parent.parent
+
+
+# Returns dataset folder for a given experiment folder
+def get_dataset_from_experiment(experiment_path: pathlib.Path) -> pathlib.Path:
+  return experiment_path.parent.parent
+
+
+def get_classes_from_file(file: pathlib.Path) -> pathlib.Path:
+  with open(file, 'r') as f:
+    return [line[:-1].encode('utf8') for line in f.readlines()]
 
 
 if __name__ == '__main__':
-  folder = '../exports/2020-02-07 01-09-35/'
-  labels = get_classes_from_directory(folder)
+  directory = '../exports/2020-03-01 07-34-19 (eight classes)/'
+  labels = get_classes_from_folder(pathlib.Path(directory))
   print(labels)
-  exists = verify_tfrecords_from_directory(folder)
-  print(exists)
-
+  verify_default_records_from_folder(pathlib.Path(directory))
+  files = get_tfrecords_from_folder(directory)
+  print(files)

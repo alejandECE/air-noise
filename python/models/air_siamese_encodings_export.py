@@ -1,12 +1,20 @@
 #  Created by Luis A. Sanchez-Perez (alejand@umich.edu).
 #  Copyright © Do not distribute or use without authorization from author
 
-import tensorflow as tf
-from commons import AUTOTUNE
-from air_siamese_architecture import parse_observation
-from air_siamese_architecture import build_sequence
-from air_siamese_architecture import get_embedding
 import os
+import argparse
+import pathlib
+from collections import Counter
+import tensorflow as tf
+from air_siamese_architecture import parse_observation
+from air_siamese_architecture import get_embedding
+from air_siamese_architecture import SIBLING_MODEL_NAME
+from commons import AUTOTUNE
+from commons import get_tfrecords_from_folder
+from commons import get_model_from_experiment
+from commons import get_dataset_from_experiment
+from commons import generate_embeddings_path
+
 
 # Constants
 BATCH_SIZE = 64
@@ -19,41 +27,50 @@ feature_description = {
 
 
 # Creates tf.data.Dataset with labeled embeddings observations from tfrecord files
-def create_export_dataset(records_path: list, model_path: str) -> tf.data.Dataset:
+def create_export_dataset(tfrecords: list, sibling: tf.keras.Model) -> tf.data.Dataset:
   # Reads tfrecords from files
-  records_ds = tf.data.TFRecordDataset(records_path)
+  records_ds = tf.data.TFRecordDataset(tfrecords)
   # Parses observation from tfrecords
   records_ds = records_ds.map(parse_observation, num_parallel_calls=AUTOTUNE)
-  # Builds a sequence to feed siamese networks
-  records_ds = records_ds.map(build_sequence, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
+  # Batches dataset
+  records_ds = records_ds.batch(BATCH_SIZE)
   # Get the embedding dataset using the model trained
-  embedding_ds = records_ds.map(lambda inputs, labels: get_embedding(model_path, inputs, labels),
+  embedding_ds = records_ds.map(lambda inputs, labels: get_embedding(sibling, inputs, labels),
                                 num_parallel_calls=AUTOTUNE).unbatch().prefetch(1)
   return embedding_ds
 
 
 # Export embeddings to tfrecords
-def export_embeddings_from_dataset(dataset: tf.data.Dataset, destination: str):
-  with tf.io.TFRecordWriter(destination) as writer:
+def export_embeddings_from_dataset(dataset: tf.data.Dataset, embeddings_path: pathlib.Path):
+  # Generates embeddings and stores them in a tfrecord file
+  classes_counter = Counter()
+  with tf.io.TFRecordWriter(str(embeddings_path)) as writer:
     for embedding, label in dataset:
+      classes_counter[label.numpy()] += 1
       feature = {
         'embedding': tf.train.Feature(float_list=tf.train.FloatList(value=list(embedding.numpy().ravel()))),
         'label': tf.train.Feature(bytes_list=tf.train.BytesList(value=[label.numpy()]))
       }
       example = tf.train.Example(features=tf.train.Features(feature=feature))
       writer.write(example.SerializeToString())
+  # Stores labels in the current dataset
+  classes_path = embeddings_path.parent / 'classes.txt'
+  labels = [item[0] for item in sorted(classes_counter.items(), key=lambda item: item[1], reverse=True)]
+  with open(classes_path, 'w') as file:
+    file.writelines([entry.decode() + '\n' for entry in labels])
 
 
 if __name__ == '__main__':
   # Selects CPU or GPU
   os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-  # Training/Test data files
-  train_file = '../exports/2020-03-01 07-34-19/train.tfrecord'
-  test_file = '../exports/2020-03-01 07-34-19/test.tfrecord'
-  # Model to generate the embedding with
-  load_path = 'trained_model/air_siamense_sibling 2020-06-28 23-33-06'
+  # Parsing arguments
+  parser = argparse.ArgumentParser()
+  parser.add_argument('folder', help='Experiment folder containing results', type=str)
+  args = parser.parse_args()
+  folder = args.folder
   # Creates tf.data.Dataset with labeled embeddings observations
-  ds = create_export_dataset([train_file, test_file], load_path)
+  experiment_path = pathlib.Path(folder)
+  model = get_model_from_experiment(experiment_path, SIBLING_MODEL_NAME)
+  ds = create_export_dataset(get_tfrecords_from_folder(get_dataset_from_experiment(experiment_path)), model)
   # Export observations to tfrecords
-  save_path = 'embeddings/' + load_path.split(sep='/')[-1] + '.tfrecord'
-  export_embeddings_from_dataset(ds, save_path)
+  export_embeddings_from_dataset(ds, generate_embeddings_path(experiment_path))

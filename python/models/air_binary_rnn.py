@@ -8,11 +8,11 @@ from typing import Tuple
 import tensorflow as tf
 from spectrogram_sequencer import SpectrogamSequencer
 from commons import AUTOTUNE
-from commons import EXPERIMENTS_FOLDER
-from commons import LOCAL_DIAGRAM_FOLDER
-from commons import LOCAL_TRAINED_MODEL_FOLDER
-from commons import verify_tfrecords_from_directory
-from commons import get_classes_from_directory
+from commons import generate_experiment_path
+from commons import generate_diagram_path
+from commons import generate_model_path
+from commons import verify_default_records_from_folder
+from commons import get_classes_from_folder
 from classification_utils import display_performance
 import sys
 sys.path.append('../extraction')
@@ -67,7 +67,7 @@ class AirBinaryRNN:
     self.dataset_folder = dataset_folder
     self.experiment_path, self.model_path, self.diagram_path = self.setup_experiment_folder()
     # Determine classes from folder
-    categories = get_classes_from_directory(dataset_folder)
+    categories = get_classes_from_folder(dataset_folder)
     # Verify binary
     assert len(categories) == 2, 'Wrong number of classes. Expecting two.'
     self.categories = categories
@@ -86,21 +86,13 @@ class AirBinaryRNN:
   # Setup experiment folder
   def setup_experiment_folder(self) -> Tuple:
     # Verify train.tfrecord and test.tfrecord exist in dataset folder
-    assert verify_tfrecords_from_directory(self.dataset_folder), 'There is no train.tfrecord or test.tfrecord' \
-                                                                 'in the folder specified '
+    verify_default_records_from_folder(self.dataset_folder)
     # Experiment path (root folder of the experiment)
-    experiment_path = self.dataset_folder / EXPERIMENTS_FOLDER / datetime.datetime.now().strftime('%Y-%m-%d'
-                                                                                                  '-%H-%M-%S')
-    if not experiment_path.exists():
-      experiment_path.mkdir(parents=False)
+    experiment_path = generate_experiment_path(self.dataset_folder)
     # Model path (where it is saved during training)
-    model_path = experiment_path / LOCAL_TRAINED_MODEL_FOLDER / MODELS_NAME
-    if not model_path.exists():
-      model_path.mkdir(parents=True)
+    model_path = generate_model_path(experiment_path, MODELS_NAME)
     # Keras model diagram
-    diagram_path = experiment_path / LOCAL_DIAGRAM_FOLDER / (MODELS_NAME + '.jpg')
-    if not diagram_path.parent.exists():
-      diagram_path.parent.mkdir(parents=False)
+    diagram_path = generate_diagram_path(experiment_path, MODELS_NAME)
     # Returns all relevant paths as tuple
     return experiment_path, model_path, diagram_path
 
