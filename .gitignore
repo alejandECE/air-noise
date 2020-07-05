@@ -1,6 +1,5 @@
 .ipynb_checkpoints
 *.wav
-*.txt
 *.zip
 *.csv
 *.npy

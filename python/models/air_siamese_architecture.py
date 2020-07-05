@@ -4,18 +4,12 @@
 import argparse
 import pathlib
 import time
-import datetime
-from collections import namedtuple
+import air_siamese_logs as logging
 from typing import Tuple, List
 from spectrogram_sequencer import SpectrogamSequencer
 import tensorflow as tf
 import numpy as np
-from commons import AUTOTUNE
-from commons import generate_experiment_path
-from commons import generate_model_path
-from commons import generate_diagram_path
-from commons import get_classes_from_folder
-from commons import get_tfrecords_from_folder
+import commons
 import sys
 
 sys.path.append('../extraction')
@@ -25,15 +19,11 @@ from tfrecord_dataset import feature_description
 SIBLING_MODEL_NAME = 'air_siamense_sibling'
 TIME_SIZE = 401
 MFCC_SIZE = 128
-POSITIVE_SAMPLES = 32
-NEGATIVE_SAMPLES = 32
+POSITIVE_SAMPLES = 16
+NEGATIVE_SAMPLES = 16
 BUFFER_SIZE = 1000
 WINDOW_SIZE = 50
 WINDOW_OVERLAP = 0.5
-
-# Evaluation tuples to keep record
-Comparison = namedtuple('Comparison', ['distance', 'category'])
-Entry = namedtuple('Entry', ['category', 'comparisons'])
 
 
 def contrastive_loss(emb1: tf.Tensor, emb2: tf.Tensor, margin: float):
@@ -73,12 +63,12 @@ def create_training_dataset(tfrecords: list, categories: list) -> tf.data.Datase
   # Reads tfrecords from file
   records_ds = tf.data.TFRecordDataset(tfrecords)
   # Parses observation from tfrecords
-  records_ds = records_ds.map(parse_observation, num_parallel_calls=AUTOTUNE)
+  records_ds = records_ds.map(parse_observation, num_parallel_calls=commons.AUTOTUNE)
   # Creates list of datasets, each having observations from only one class
   labeled_datasets = []
   for category in categories:
     filtered = records_ds.filter(lambda spec, label: tf.equal(label, category))
-    filtered = filtered.map(lambda spec, label: spec, num_parallel_calls=AUTOTUNE).cache()
+    filtered = filtered.map(lambda spec, label: spec, num_parallel_calls=commons.AUTOTUNE).cache()
     labeled_datasets.append(filtered)
 
   # Creates positive observations
@@ -87,7 +77,7 @@ def create_training_dataset(tfrecords: list, categories: list) -> tf.data.Datase
   for dataset in labeled_datasets:
     shuffled = dataset.enumerate().shuffle(BUFFER_SIZE, reshuffle_each_iteration=True)
     zipped = tf.data.Dataset.zip((shuffled, shuffled)).filter(lambda x, y: x[0] < y[0])
-    zipped = zipped.map(lambda x, y: (x[1], y[1], tf.constant(1, dtype=tf.uint8)), num_parallel_calls=AUTOTUNE)
+    zipped = zipped.map(lambda x, y: (x[1], y[1], tf.constant(1, dtype=tf.uint8)), num_parallel_calls=commons.AUTOTUNE)
     zipped = zipped.repeat()
     positive_datasets.append(zipped)
   # Samples the same number of pairs from all datasets
@@ -105,7 +95,7 @@ def create_training_dataset(tfrecords: list, categories: list) -> tf.data.Datase
     for j in range(i + 1, len(labeled_datasets)):
       right_ds = labeled_datasets[j].shuffle(BUFFER_SIZE, reshuffle_each_iteration=True).repeat()
       zipped = tf.data.Dataset.zip((left_ds, right_ds)).map(lambda x, y: (x, y, tf.constant(0, dtype=tf.uint8)),
-                                                            num_parallel_calls=AUTOTUNE)
+                                                            num_parallel_calls=commons.AUTOTUNE)
       negative_datasets.append(zipped)
   # Samples the same number of pairs from all datasets
   samples_per_dataset = [int(NEGATIVE_SAMPLES / len(negative_datasets))] * len(negative_datasets)
@@ -132,18 +122,18 @@ def create_test_dataset(tfrecords: list, categories: list, sibling: tf.keras.Mod
   # Reads tfrecords from file
   records_ds = tf.data.TFRecordDataset(tfrecords)
   # Parses observation from tfrecords
-  records_ds = records_ds.map(parse_observation, num_parallel_calls=AUTOTUNE)
+  records_ds = records_ds.map(parse_observation, num_parallel_calls=commons.AUTOTUNE)
   # Define batches
   records_ds = records_ds.batch(POSITIVE_SAMPLES + NEGATIVE_SAMPLES)
   # Get the embedding dataset using the model trained
   embedding_ds = records_ds.map(lambda inputs, labels: get_embedding(sibling, inputs, labels),
-                                num_parallel_calls=AUTOTUNE).unbatch().cache()
+                                num_parallel_calls=commons.AUTOTUNE).unbatch().cache()
   # Creates a dictionary of datasets with (keys, values): label, (positive samples, negative samples)
   datasets = {}
   for category in categories:
     # Creates a dataset only selecting observations from the category
     positive_ds = embedding_ds.filter(lambda embedding, label: tf.equal(label, category))
-    positive_ds = positive_ds.map(lambda embedding, label: embedding, num_parallel_calls=AUTOTUNE)
+    positive_ds = positive_ds.map(lambda embedding, label: embedding, num_parallel_calls=commons.AUTOTUNE)
     positive_ds = positive_ds.shuffle(BUFFER_SIZE).prefetch(4)
     # Creates dataset with the rest of observations
     negative_ds = embedding_ds.filter(lambda embedding, label: tf.not_equal(label, category))
@@ -152,34 +142,20 @@ def create_test_dataset(tfrecords: list, categories: list, sibling: tf.keras.Mod
   return datasets
 
 
-# Logs the resulting entry from the n-way evaluation routine
-def log_evaluation_entry(elapsed_time: float, entry: Tuple[str, list]) -> None:
-  print('Entry ({:.2f} secs):'.format(elapsed_time), entry)
-
-
-# Logs the summary from the n-way evaluation routine
-def log_evaluation_summary(evaluations: List[Entry], n_way: int) -> None:
-  print('\nResults Summary')
-  for i in range(1, n_way // 2 + 1):
-    matching = [
-      any([comparison.category == entry.category for comparison in entry.comparisons[:i]])
-      for entry in evaluations
-    ]
-    print('Accuracy (Top {}): {}'.format(i, sum(matching) / len(matching)))
-
-
 class AirSiameseLearner:
   """
   Siamese architecture to learn embeddings that allow to differentiate aircraft classes based on noise during take-off.
   """
 
-  def __init__(self, dataset_folder: pathlib.Path, leftout: int = 0, use_regularizer=True, use_batch_norm=False,
+  def __init__(self, dataset_folder: pathlib.Path, leftout:int = 0,
+               use_regularizer=True,
+               use_batch_norm=False,
                architecture='absolute'):
     # Setups experiment folder
     self.dataset_folder = dataset_folder
     self.experiment_path, self.model_path, self.diagram_path = self.setup_experiment_folder()
     # Determine classes from folder
-    self.categories = get_classes_from_folder(dataset_folder)
+    self.categories = commons.get_classes_from_folder(dataset_folder)
     self.leftout = leftout
     # Stores options
     self.architecture = architecture
@@ -194,11 +170,11 @@ class AirSiameseLearner:
   # Setup experiment folder
   def setup_experiment_folder(self) -> Tuple:
     # Experiment path (root folder of the experiment)
-    experiment_path = generate_experiment_path(self.dataset_folder)
+    experiment_path = commons.generate_experiment_path(self.dataset_folder)
     # Model path (where it is saved during training)
-    model_path = generate_model_path(experiment_path, SIBLING_MODEL_NAME)
+    model_path = commons.generate_model_path(experiment_path, SIBLING_MODEL_NAME)
     # Keras model diagram
-    diagram_path = generate_diagram_path(experiment_path, SIBLING_MODEL_NAME)
+    diagram_path = commons.generate_diagram_path(experiment_path, SIBLING_MODEL_NAME)
     # Returns all relevant paths as tuple
     return experiment_path, model_path, diagram_path
 
@@ -337,47 +313,63 @@ class AirSiameseLearner:
     return loss, metric
 
   # Trains model
-  def train(self, epochs: int) -> None:
+  def train(self, epochs: int, verbose=False) -> None:
     # Creates dataset leaving out the least common classes
-    filtered_categories = self.categories[:-self.leftout] if self.leftout > 0 else self.categories
+    included_categories = self.categories[:-self.leftout] if self.leftout > 0 else self.categories
     train_ds = create_training_dataset(
-      get_tfrecords_from_folder(self.dataset_folder),
-      filtered_categories
+      commons.get_tfrecords_from_folder(self.dataset_folder),
+      included_categories
     )
     # Creates an iterator to request batches
     iterator = iter(train_ds)
     # Training loop
+    log_entries = []
     for epoch in range(epochs):
       start = time.perf_counter()
       # Gets a batch from dataset
       batch = iterator.get_next()
       # Performs update step
       loss, metric = self.train_step(batch)
-      # Logs training results
-      print('\nEpoch {} out of {} complete ({:.2f} secs) -- Batch Loss: {:.4f} -- Batch Acc: {:.2f}'.format(
-        epoch + 1,
-        epochs,
-        time.perf_counter() - start,
-        loss,
-        tf.squeeze(metric)
-      ), end='')
-    print()
+      # Logs training step
+      entry = logging.TrainingEntry(
+        current=epoch + 1,
+        epochs=epochs,
+        time=time.perf_counter() - start,
+        loss=loss,
+        metric=tf.squeeze(metric)
+      )
+      log_entries.append(entry)
+      if verbose:
+        logging.write_step_log_to_console(entry)
+    # Generates summary
+    excluded_categories = self.categories[-self.leftout:] if self.leftout > 0 else []
+    summary = logging.TrainingSummary(
+      included=included_categories,
+      excluded=excluded_categories
+    )
+    logging.write_summary_log_to_console(summary)
+    # Logs training to file
+    with open(self.experiment_path / 'training.txt', 'w') as log_file:
+      # Logging each step
+      logging.write_step_log_to_file(log_file, log_entries)
+      # Logging summary
+      logging.write_summary_log_to_file(log_file, summary)
     # Stores resulting sibling network
     tf.keras.models.save_model(self.sibling, str(self.model_path))
 
   # Use n-way one shot learning evaluation
-  def evaluate(self, evals: int = 100, n_way=4) -> list:
+  def evaluate(self, evals: int = 100, nway=4, verbose=False) -> None:
     # Creates dataset to sample from
     filtered_categories = self.categories[-self.leftout:] if self.leftout > 0 else self.categories
     datasets = create_test_dataset(
-      get_tfrecords_from_folder(self.dataset_folder),
+      commons.get_tfrecords_from_folder(self.dataset_folder),
       filtered_categories,
       self.sibling,
-      n_way
+      nway
     )
     # Performs n-way one shot learning
-    evaluations = []
-    # Selects random classes to evaluate
+    log_entries = []
+    # Randomly samples from excluded categories (comparisons are still performed vs all categories)
     sampled_categories = np.random.choice(filtered_categories, evals, replace=True)
     for one_shot_category in sampled_categories:
       start = time.perf_counter()
@@ -390,7 +382,7 @@ class AirSiameseLearner:
       # Compares the one shot embedding with one sample drawn randomly from the same class
       positive_obs = iter_positive.get_next()
       comparisons = [
-        Comparison(
+        logging.Comparison(
           distance=compute_squared_distance(one_shot_obs, tf.expand_dims(positive_obs, axis=0))[0],
           category=one_shot_category
         )
@@ -400,24 +392,37 @@ class AirSiameseLearner:
       negative_distances = compute_squared_distance(one_shot_obs, negative_obs)
       for value, label in zip(negative_distances, negative_labels):
         comparisons.append(
-          Comparison(
+          logging.Comparison(
             distance=value,
             category=label.numpy()
           )
         )
+      end = time.perf_counter()
       # Generates evaluation entry
-      entry = Entry(
+      entry = logging.EvaluationEntry(
+        time=end - start,
         category=one_shot_category,
         comparisons=sorted(comparisons, key=lambda comparison: comparison.distance)
       )
-      evaluations.append(entry)
-      end = time.perf_counter()
-      # Logs entry
-      log_evaluation_entry(end - start, entry)
-    # Computing matching estimations
-    log_evaluation_summary(evaluations, n_way)
-
-    return evaluations
+      log_entries.append(entry)
+      if verbose:
+        logging.write_step_log_to_console(entry)
+    # Generates summary
+    accuracies = []
+    for i in range(1, nway // 2 + 1):
+      matches = [
+        any([comparison.category == entry.category for comparison in entry.comparisons[:i]])
+        for entry in log_entries
+      ]
+      accuracies.append(sum(matches) / len(matches))
+    summary = logging.EvaluationSummary(accuracies=accuracies)
+    logging.write_summary_log_to_console(summary)
+    # Logs evaluation to file
+    with open(self.experiment_path / 'evaluation.txt', 'w') as log_file:
+      # Logging each step
+      logging.write_step_log_to_file(log_file, log_entries)
+      # Logging summary
+      logging.write_summary_log_to_file(log_file, summary)
 
 
 if __name__ == '__main__':
@@ -428,18 +433,24 @@ if __name__ == '__main__':
   parser.add_argument('folder', help='Dataset folder with tfrecords', type=str)
   parser.add_argument('--epochs', help='Epochs to train (Default: 100)', type=int)
   parser.add_argument('--leftout', help='Categories leftout (Default: 0)', type=int)
+  parser.add_argument('--evals', help='Number of evaluations once trained (Default: 100)', type=int)
+  parser.add_argument('--nway', help='N-way used for evaluation (Default: 8)', type=int)
   parser.add_argument('--use_regularizer', help='Use regularization', action="store_true")
   parser.add_argument('--use_batch_norm', help='Use batch normalization', action="store_true")
+  parser.add_argument('--verbose', help='Verbosity', action="store_true")
   args = parser.parse_args()
   epochs = args.epochs if args.epochs else 100
   leftout = args.leftout if args.leftout else 0
+  evals = args.evals if args.evals else 100
+  nway = args.nway if args.nway else 8
   use_regularizer = True if args.use_regularizer else False
   use_batch_norm = True if args.use_batch_norm else False
+  verbose = True if args.verbose else False
   # Dataset folder
   folder = args.folder
   # Performs training using only the first four classes
   learner = AirSiameseLearner(pathlib.Path(folder), leftout=leftout, use_regularizer=True, use_batch_norm=False)
   learner.summary()
-  learner.train(epochs)
+  learner.train(epochs, verbose=verbose)
   # Evaluates the model using n-way one shot learning
-  learner.evaluate(evals=100, n_way=8)
+  learner.evaluate(evals=evals, nway=nway, verbose=verbose)
