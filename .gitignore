@@ -3,8 +3,9 @@
 *.zip
 *.csv
 *.npy
-train.tfrecord
-test.tfrecord
+*.tfrecord
+!embeddings.tfrecord
+trained_model/
 *.h5
 __pycache__
 .idea/
