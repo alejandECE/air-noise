@@ -3,7 +3,8 @@
 *.zip
 *.csv
 *.npy
-*.tfrecord
+train.tfrecord
+test.tfrecord
 *.h5
 __pycache__
 .idea/
