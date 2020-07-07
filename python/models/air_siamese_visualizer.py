@@ -1,5 +1,6 @@
 #  Created by Luis A. Sanchez-Perez (alejand@umich.edu).
 #  Copyright © Do not distribute or use without authorization from author
+
 import argparse
 import pathlib
 from typing import Tuple
@@ -16,7 +17,6 @@ import matplotlib.patches as mpatches
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 import numpy as np
-import os
 
 # Constants
 BATCH_SIZE = 64

@@ -505,8 +505,8 @@ if __name__ == '__main__':
   learner = AirSiameseLearner(pathlib.Path(folder),
                               leftout=leftout,
                               architecture='contrastive' if contrastive else 'absolute',
-                              use_regularizer=True,
-                              use_batch_norm=False)
+                              use_regularizer=use_regularizer,
+                              use_batch_norm=use_batch_norm)
   learner.summary()
   learner.train(epochs, verbose=verbose)
   # Evaluates the model using n-way one shot learning
