@@ -1,6 +1,7 @@
 #  Created by Luis A. Sanchez-Perez (alejand@umich.edu).
 #  Copyright © Do not distribute or use without authorization from author
 
+import os
 import argparse
 import pathlib
 import time
@@ -11,7 +12,6 @@ import tensorflow as tf
 import numpy as np
 import commons
 import sys
-
 sys.path.append('../extraction')
 from tfrecord_dataset import feature_description
 
@@ -26,15 +26,54 @@ WINDOW_SIZE = 50
 WINDOW_OVERLAP = 0.5
 
 
-def contrastive_loss(emb1: tf.Tensor, emb2: tf.Tensor, margin: float):
-  tf.math.square(emb1 - emb2)
-  pass
+# Contrastive loss
+class ContrastiveLoss(tf.keras.losses.Loss):
+  def __init__(self, margin: float = 1.):
+    super(ContrastiveLoss, self).__init__()
+    self.margin = margin
+
+  def call(self, y_true, y_pred):
+    y_true = tf.cast(y_true, dtype=y_pred.dtype)
+    return y_true * tf.square(y_pred) + (1. - y_true) * tf.square(tf.maximum(0., self.margin - y_pred))
 
 
-# Computes the absolute difference of two embeddings
-class AbsoluteSimilarity(tf.keras.layers.Layer):
+# Computes the Eucledian between two embeddings
+class EucledianDistance(tf.keras.layers.Layer):
   def __init__(self):
-    super(AbsoluteSimilarity, self).__init__()
+    super(EucledianDistance, self).__init__()
+
+  def call(self, emb1, emb2):
+    return tf.sqrt(tf.reduce_sum(tf.square(emb1 - emb2), axis=-1, keepdims=True))
+
+
+# Custom metric to evaluate current embeddings based on their distance and margin of contrastive loss
+class EmbeddingQuality(tf.keras.metrics.Metric):
+  def __init__(self, margin: float = 1., name='embedding_quality', **kwargs):
+    super(EmbeddingQuality, self).__init__(name=name, **kwargs)
+    self.margin = margin
+    self.correct = self.add_weight(name='correct', initializer='zeros')
+    self.observations = self.add_weight(name='observations', initializer='zeros')
+
+  def update_state(self, y_true, y_pred, **kwargs):
+    # Correct negative entries (distance >= margin)
+    self.correct.assign_add(tf.reduce_sum(
+      (1. - y_true) * tf.cast(tf.greater_equal(y_pred, self.margin), dtype=y_true.dtype)
+    ))
+    # Correct positive entries (distance <= margin)
+    self.correct.assign_add(tf.reduce_sum(
+      y_true * tf.cast(tf.greater_equal(self.margin, y_pred), dtype=y_true.dtype)
+    ))
+    # Total observations
+    self.observations.assign_add(y_true.shape[0])
+
+  def result(self):
+    return self.correct / self.observations
+
+
+# Computes the absolute difference between two embeddings
+class AbsoluteDifference(tf.keras.layers.Layer):
+  def __init__(self):
+    super(AbsoluteDifference, self).__init__()
 
   def call(self, emb1, emb2):
     return tf.math.abs(emb1 - emb2)
@@ -135,10 +174,10 @@ def create_test_dataset(tfrecords: list, categories: list, sibling: tf.keras.Mod
     # Creates a dataset only selecting observations from the category
     positive_ds = embedding_ds.filter(lambda embedding, label: tf.equal(label, category))
     positive_ds = positive_ds.map(lambda embedding, label: embedding, num_parallel_calls=commons.AUTOTUNE)
-    positive_ds = positive_ds.shuffle(BUFFER_SIZE).prefetch(4)
+    positive_ds = positive_ds.shuffle(BUFFER_SIZE).prefetch(1)
     # Creates dataset with the rest of observations
     negative_ds = embedding_ds.filter(lambda embedding, label: tf.not_equal(label, category))
-    negative_ds = negative_ds.shuffle(BUFFER_SIZE).batch(n_way - 1, drop_remainder=True).prefetch(4)
+    negative_ds = negative_ds.shuffle(BUFFER_SIZE).batch(n_way - 1, drop_remainder=True).prefetch(1)
     datasets[category] = (positive_ds, negative_ds)
   return datasets
 
@@ -189,11 +228,13 @@ class AirSiameseLearner:
     # Embeddings for both inputs
     embedding1 = sibling(input1)
     embedding2 = sibling(input2)
-    # Computes similarity
-    similarity = AbsoluteSimilarity()(embedding1, embedding2)
-    # Dense layer to finally output probability of been the same or different class
-    dense = tf.keras.layers.Dense(1, activation=tf.nn.sigmoid)
-    output = dense(similarity)
+    if self.architecture == 'absolute':
+      # Absolute difference and dense layer to output probability of been the same or different class
+      similarity = AbsoluteDifference()(embedding1, embedding2)
+      output = tf.keras.layers.Dense(1, activation=tf.nn.sigmoid)(similarity)
+    else:
+      # Computes Eucledian distance between embeddings
+      output = EucledianDistance()(embedding1, embedding2)
     # Builds siamese architecture
     siamese = tf.keras.models.Model([input1, input2], output, name='siamese_nn')
     # Selects loss and optimizer
@@ -201,8 +242,9 @@ class AirSiameseLearner:
     if self.architecture == 'absolute':
       self.metric = tf.keras.metrics.BinaryAccuracy()
       self.loss = tf.keras.losses.BinaryCrossentropy()
-    elif self.architecture == 'contrastive':
-      self.loss = contrastive_loss
+    else:
+      self.metric = EmbeddingQuality(margin=1.)
+      self.loss = ContrastiveLoss(margin=1.)
     # Return tuple of models
     return siamese, sibling
 
@@ -309,7 +351,7 @@ class AirSiameseLearner:
     # Updates params
     self.optimizer.apply_gradients(zip(gradients, variables))
     # Computes metric
-    metric = self.metric(tf.cast(y_true, tf.float32), tf.squeeze(y_pred))
+    metric = self.metric(tf.cast(y_true, dtype=y_pred.dtype), tf.squeeze(y_pred))
     # Returns loss and metric
     return loss, metric
 
@@ -348,7 +390,8 @@ class AirSiameseLearner:
       included=included_categories,
       excluded=excluded_categories
     )
-    logging.write_summary_log_to_console(summary)
+    if verbose:
+      logging.write_summary_log_to_console(summary)
     # Logs training to file
     with open(self.experiment_path / 'training.txt', 'w') as log_file:
       # Logging each step
@@ -427,18 +470,19 @@ class AirSiameseLearner:
 
 
 if __name__ == '__main__':
-  # Selects CPU or GPU
-  # os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-  # Parsing arguments
+  # Defining arguments
   parser = argparse.ArgumentParser()
   parser.add_argument('folder', help='Dataset folder with tfrecords', type=str)
   parser.add_argument('--epochs', help='Epochs to train (Default: 100)', type=int)
   parser.add_argument('--leftout', help='Categories leftout (Default: 0)', type=int)
+  parser.add_argument('--contrastive', help='Use contrastive loss', action="store_true")
   parser.add_argument('--evals', help='Number of evaluations once trained (Default: 100)', type=int)
   parser.add_argument('--nway', help='N-way used for evaluation (Default: 8)', type=int)
   parser.add_argument('--use_regularizer', help='Use regularization', action="store_true")
   parser.add_argument('--use_batch_norm', help='Use batch normalization', action="store_true")
   parser.add_argument('--verbose', help='Verbosity', action="store_true")
+  parser.add_argument('--cpu', help='Use CPU instead of GPU', action="store_true")
+  # Parsing arguments
   args = parser.parse_args()
   epochs = args.epochs if args.epochs else 100
   leftout = args.leftout if args.leftout else 0
@@ -447,10 +491,22 @@ if __name__ == '__main__':
   use_regularizer = True if args.use_regularizer else False
   use_batch_norm = True if args.use_batch_norm else False
   verbose = True if args.verbose else False
+  contrastive = True if args.verbose else False
+  if args.cpu:
+    # Selecting CPU by not exposing GPU devices
+    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+  else:
+    # Allowing memory growth
+    physical_devices = tf.config.list_physical_devices('GPU')
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
   # Dataset folder
   folder = args.folder
   # Performs training using only the first four classes
-  learner = AirSiameseLearner(pathlib.Path(folder), leftout=leftout, use_regularizer=True, use_batch_norm=False)
+  learner = AirSiameseLearner(pathlib.Path(folder),
+                              leftout=leftout,
+                              architecture='contrastive' if contrastive else 'absolute',
+                              use_regularizer=True,
+                              use_batch_norm=False)
   learner.summary()
   learner.train(epochs, verbose=verbose)
   # Evaluates the model using n-way one shot learning
