@@ -59,9 +59,8 @@ def confusion_matrix(model: tf.keras.Model, dataset: tf.data.Dataset):
 def display_performance(model: tf.keras.Model,
                         train_ds: tf.data.Dataset,
                         test_ds: tf.data.Dataset) -> None:
-
-  print('\n------- Training --------')
   matrix = confusion_matrix(model, train_ds).numpy()
+  print('\n------- Training --------')
   print('Confusion Matrix:')
   print(matrix)
   accuracy, precision, recall, fscore = get_macro_metrics(matrix)
@@ -70,8 +69,8 @@ def display_performance(model: tf.keras.Model,
   print('Recall: {:.4f}'.format(recall))
   print('F1 Score: {:.4f}'.format(fscore))
 
-  print('\n--------- Test ----------')
   matrix = confusion_matrix(model, test_ds).numpy()
+  print('\n--------- Test ----------')
   print('Confusion Matrix:')
   print(matrix)
   accuracy, precision, recall, fscore = get_macro_metrics(matrix)

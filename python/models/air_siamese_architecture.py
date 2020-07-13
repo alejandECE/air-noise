@@ -352,6 +352,7 @@ class AirSiameseLearner:
     self.optimizer.apply_gradients(zip(gradients, variables))
     # Computes metric
     metric = self.metric(tf.cast(y_true, dtype=y_pred.dtype), tf.squeeze(y_pred))
+    self.metric.reset_states()
     # Returns loss and metric
     return loss, metric
 
