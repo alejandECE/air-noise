@@ -93,6 +93,7 @@ def generate_tensorboard_path(embedding_path: pathlib.Path) -> pathlib.Path:
     path.mkdir(parents=True)
   return path
 
+
 # Returns experiment folder for a given embeddings folder
 def get_experiment_from_embeddings(embeddings_path: pathlib.Path) -> pathlib.Path:
   return embeddings_path.parent.parent.parent
