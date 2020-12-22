@@ -104,7 +104,7 @@ def get_dataset_from_experiment(experiment_path: pathlib.Path) -> pathlib.Path:
   return experiment_path.parent.parent
 
 
-def get_classes_from_file(file: pathlib.Path) -> pathlib.Path:
+def get_classes_from_file(file: pathlib.Path) -> list:
   with open(file, 'r') as f:
     return [line[:-1].encode('utf8') for line in f.readlines()]
 

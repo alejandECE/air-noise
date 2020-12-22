@@ -8,8 +8,8 @@ class SpectrogamSequencer(tf.keras.layers.Layer):
   """
   A non-trainable layer to generate a sequence of potentially overlapping window from an input spectrogram.
 
-  Inputs are expected to be (batch, freq, time)
-  Outputs will be (batch, windows, freq, time)
+  Inputs are expected to be (batch, freq, time, 1)
+  Outputs will be (batch, windows, freq, time, 1)
   """
 
   def __init__(self, window_size: int, window_overlap=0.5, name='Sequencer', **kwargs):
