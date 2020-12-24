@@ -13,16 +13,16 @@ Description coming soon...
 ### Models
 
 Some of the [models](https://github.com/alejandECE/air-noise/tree/master/python/models) tested are:
-* A CNN with 1D Conv to extract overlapping windowed features (named air_temporal_cnn):
-  * Results with 2 classes: [here](https://github.com/alejandECE/air-noise/blob/master/python/tests/air_two_classes_temporal_cnn_test.ipynb)
-  * Results with 4 classes: [here](https://github.com/alejandECE/air-noise/blob/master/python/tests/air_four_classes_temporal_cnn_test.ipynb)
-* A RNN where at each step (window) a CNN with 2D Conv is used to extract features:
-  * Results with 2 classes: [here](https://github.com/alejandECE/air-noise/blob/beam-pipeline/python/tests/air_two_classes_rnn_test.ipynb)
-  * Results with 4 classes: [here](https://github.com/alejandECE/air-noise/blob/master/python/tests/air_four_classes_rnn_test.ipynb)
-  * Results with 8 classes: [here](https://github.com/alejandECE/air-noise/blob/beam-pipeline/python/tests/air_two_classes_rnn_test.ipynb)
-* A [siamese network architecture](https://github.com/alejandECE/air-noise/blob/master/python/models/air_siamese_architecture.py) to be able to one-shot learned the encoding for any new observation. This is similar to the face recognition application where the sibling network is then used to find the encoding of any new face. Here the sibling network is used to find the encoding of any new aircraft. A [tf.data pipeline](https://github.com/alejandECE/air-noise/blob/bd565bae684e718324064e031579bdc8c00f4320/python/models/air_siamese_architecture.py#L102) is created to efficiently generate positive/negative pairs. Here are some visualizations of the embeddings found using PCA and Tensorboard:
-  * [Embeddings notebook](https://github.com/alejandECE/air-noise/blob/master/python/tests/air_siamese_embeddings_visualization%201.ipynb)
+* A [CNN](python/exports/2020-02-07%2001-09-35%20(four%20classes)/experiments/2020-07-02-13-50-21/diagrams/air_multiclass_temporal_cnn.jpg) with 1D Conv to extract overlapping windowed features (named air_temporal_cnn):
+  * Results with 2 classes: [here](python/tests/air_two_classes_temporal_cnn_test.ipynb)
+  * Results with 4 classes: [here](python/tests/air_four_classes_temporal_cnn_test.ipynb)
+* A [RNN](python/exports/2020-03-01%2007-34-19%20(eight%20classes)/experiments/2020-07-02-14-24-54/diagrams/air_multiclass_rnn.jpg) where at each step (window) a CNN with 2D Conv is used to extract features:
+  * Results with 2 classes: [here](python/tests/air_two_classes_rnn_test.ipynb)
+  * Results with 4 classes: [here](python/tests/air_four_classes_rnn_test.ipynb)
+  * Results with 8 classes: [here](python/tests/air_two_classes_rnn_test.ipynb)
+* A [siamese network architecture](python/models/air_siamese_architecture.py) to be able to one-shot learned the encoding for any new observation. This is similar to the face recognition application where the sibling network is then used to find the encoding of any new face. Here the sibling network is used to find the encoding of any new aircraft. A [tf.data pipeline](python/models/air_siamese_architecture.py#L102) is created to efficiently generate positive/negative pairs. Here are some visualizations of the embeddings found using PCA and Tensorboard:
+  * [Embeddings notebook](python/tests/air_siamese_embeddings_visualization%201.ipynb)
   * Other visualizations (using Tensorboard):
-![](/python/tests/air_siamese_tensorboard_visualization%201.png)
-![](/python/tests/air_siamese_tensorboard_visualization%202.png)
-![](/python/tests/air_siamese_tensorboard_visualization%203.png)
+![](python/tests/air_siamese_tensorboard_visualization%201.png)
+![](python/tests/air_siamese_tensorboard_visualization%202.png)
+![](python/tests/air_siamese_tensorboard_visualization%203.png)
