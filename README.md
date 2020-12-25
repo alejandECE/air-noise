@@ -8,7 +8,9 @@ https://scholar.google.com/citations?user=q8RTRHkAAAAJ&hl=en
 
 ### Dataset
 
-Description coming soon...
+The dataset consists of [188 sound measurements](python/extraction/db_exploration.ipynb) of aircrafts taking-off. Each measurement consists of 12 signals (sampled at 51.2kHz over 25 seconds) captured using a fully synchronized microphone array (sensors were placed distances ranging from 5 to 40cm apart). The array was used to help [localize the aircraft during take-off](https://www.sciencedirect.com/science/article/pii/S1051200414000979). As a result, we have 12*188 signals (with 25*51,200 samples each!). However, as you might expect all twelve signals from one measurement are highly correlated (actually this is why it can be localized!). These twelve signals although highly correlated contain suttle differences (each communication channel is not subjected to the same noise). We used all twelve signals (as a form of augmentation) if the measurement was in the training set, and only one selected at random if it was in the dev/test set. [Training/dev/test set splitting](python/extraction/tfrecord_dataset.py#L84) is done based on measurement not signal.
+
+More details can be found in the scripts and notebooks [here](python/extraction).
 
 ### Models
 
