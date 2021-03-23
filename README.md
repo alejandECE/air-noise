@@ -1,4 +1,4 @@
-# air-noise
+# Aircraft Noise
 Here are some python scripts and jupyter notebooks using TF2.0 I have created to test new ideas related to the
 automatic aircraft type recognition from the sound generated during take-off (doctorate thesis topic). This is not a complete repository
 having everything that has been done and does not include the dataset either. I mainly use this material for teaching purposes now.
